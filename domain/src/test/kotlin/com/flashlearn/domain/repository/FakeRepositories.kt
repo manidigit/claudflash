@@ -64,13 +64,22 @@ class FakeLearningStateRepository : LearningStateRepository {
 
     override suspend fun getDueByStage(stage: Stage, now: Instant): List<LearningState> =
         byConcept.values
-            .filter { it.stage == stage && it.nextReviewAt != null && !it.nextReviewAt.isAfter(now) }
+            .filter {
+                // Local val, not `it.nextReviewAt` inline: a nullable property
+                // declared in a different module (domain/main) can't be
+                // smart-cast from domain/test — "Smart cast to 'Instant' is
+                // impossible" (a real compiler error, found only once this
+                // was actually compiled for the first time by real Gradle).
+                val dueAt = it.nextReviewAt
+                it.stage == stage && dueAt != null && !dueAt.isAfter(now)
+            }
             .sortedWith(compareBy({ it.nextReviewAt }, { it.conceptId }))
 
     override suspend fun getAllDueNonLearned(now: Instant): List<LearningState> =
         byConcept.values
             .filter {
-                it.stage != Stage.LEARNED && it.nextReviewAt != null && !it.nextReviewAt.isAfter(now)
+                val dueAt = it.nextReviewAt
+                it.stage != Stage.LEARNED && dueAt != null && !dueAt.isAfter(now)
             }
 
     override suspend fun getAll(): List<LearningState> = byConcept.values.toList()

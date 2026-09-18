@@ -25,7 +25,11 @@ class SelectReviewQueueUseCaseTest {
 
     private val now = Instant.parse("2026-09-13T12:00:00Z")
 
-    private class Fixture {
+    // `inner`: Fixture reads the outer class's `now` (`private val now =
+    // Instant.parse(...)` above) — a plain nested class has no implicit
+    // reference to the enclosing instance, which is exactly why this was
+    // "Unresolved reference: now" the first time it was ever compiled.
+    private inner class Fixture {
         val concepts = FakeConceptRepository()
         val learningStates = FakeLearningStateRepository()
         val difficultyStates = FakeDifficultyStateRepository()

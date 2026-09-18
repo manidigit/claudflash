@@ -28,7 +28,9 @@ class CreateBackupUseCaseTest {
 
     private val now = Instant.parse("2026-09-14T12:00:00Z")
 
-    private class Fixture {
+    // `inner`: Fixture reads the outer class's `now` — see the identical
+    // fix/reasoning in SelectReviewQueueUseCaseTest.
+    private inner class Fixture {
         val languages = FakeLanguageRepository()
         val categories = FakeCategoryRepository()
         val tags = FakeTagRepository()
