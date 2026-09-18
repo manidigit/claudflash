@@ -183,7 +183,18 @@ object VocabularyParser {
             } else {
                 // §56 ORPHAN_SOURCE — a source line was seen but no translation ever followed;
                 // preserved for manual review rather than discarded.
-                orphanLines.add(entry.originalLines.joinToString("\n"))
+                //
+                // Uses entry.sourceText (already number-stripped, same as a
+                // successful entry's own sourceText field just above) — not
+                // entry.originalLines, which still carries raw numbering
+                // (e.g. "24. palabra"). originalImportText (line 180) is the
+                // one field meant to keep that raw text (§70 Preserve
+                // Original); orphanLines is not that field. Bug found via a
+                // real CI test failure (VocabularyParserTest, numbering-gaps
+                // case) — boundary detection itself was already correct
+                // (all three of 24/29/47 were found); only the stored text
+                // for the orphan was wrong.
+                orphanLines.add(entry.sourceText)
             }
             current = null
         }

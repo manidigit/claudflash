@@ -100,6 +100,7 @@ class RestoreBackupUseCaseTest {
     private fun fullExport(
         concepts: List<Concept> = emptyList(),
         contents: List<Content> = emptyList(),
+        tags: List<Tag> = emptyList(),
         conceptTags: List<ConceptTag> = emptyList(),
         reviewSessions: List<ReviewSession> = emptyList(),
         reviewHistory: List<ReviewHistory> = emptyList(),
@@ -108,7 +109,7 @@ class RestoreBackupUseCaseTest {
         schemaVersion: Int = 1
     ) = ExportData(
         schemaVersion = schemaVersion, exportedAt = now, backupType = BackupType.FULL,
-        concepts = concepts, contents = contents, conceptTags = conceptTags,
+        concepts = concepts, contents = contents, tags = tags, conceptTags = conceptTags,
         reviewSessions = reviewSessions, reviewHistory = reviewHistory,
         learningStates = learningStates, difficultyStates = difficultyStates
     )
@@ -279,7 +280,16 @@ class RestoreBackupUseCaseTest {
         val c = concept()
         val tag = Tag(UUID.randomUUID(), "Important")
         fx.tags.insert(tag)
-        val data = fullExport(concepts = listOf(c), conceptTags = listOf(ConceptTag(c.id, tag.id)))
+        // The Tag must also be part of THIS backup, not just already
+        // present in the target DB — validateBackup() checks internal
+        // referential consistency of the export itself (a ConceptTag
+        // whose tagId isn't in the backup's own `tags` list is an invalid
+        // backup, regardless of what the target happens to already have).
+        // Bug found via a real CI test failure: this test previously
+        // omitted `tags` entirely, so validateBackup() rejected the backup
+        // and `as RestoreResult.Success` below threw ClassCastException —
+        // the fix was here, not in RestoreBackupUseCase's ConceptTag logic.
+        val data = fullExport(concepts = listOf(c), tags = listOf(tag), conceptTags = listOf(ConceptTag(c.id, tag.id)))
 
         val first = fx.restoreBackup(data, 1, now, alwaysPersist, alwaysConfirm)
             as RestoreResult.Success

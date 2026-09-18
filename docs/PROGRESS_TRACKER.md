@@ -1,6 +1,6 @@
 # FlashLearn — Progress Tracker (بازنویسی کامل v5.0)
 
-**آخرین به‌روزرسانی:** 2026-09-18 (فاز ۳۴ — دومین CI واقعی)
+**آخرین به‌روزرسانی:** 2026-09-18 (فاز ۳۵ — رفع ۳ Failure واقعی تست)
 **مرجع مشخصات:** Algorithms v4.20 + Descriptions v4.20
 **نوع کار:** بازنویسی کامل از صفر (نه ادامه کد قبلی v4.36)
 **تقسیم‌بندی:** ۳۰ مرحله؛ هر مرحله یک zip کامل و قابل build
@@ -561,6 +561,22 @@ top-level قابل import — داخل `Row{}`/`Column{}` خودکار در دس
 هیچ بررسی متنی من). الگوی روشنی شکل گرفته: کد نوشته‌شده توسط جلسات
 قبلی (قبل از دسترسی به CI واقعی) به‌طور سیستماتیک هرگز واقعاً کامپایل
 نشده بود.
+
+## فاز ۳۵ (بعد از v1.1.3): تحلیل دقیق ۳ Failure واقعی تست (توسط ابزار دیگر) + رفع
+
+یک تحلیل مستقل دیگر (نه توسط من) کامیت `v1.1.3` را واقعاً روی GitHub Actions اجرا کرد؛ `assembleDebug` این‌بار **کامل موفق شد**، ولی `gradle test` با ۳ Failure واقعی (نه خطای Cache/زیرساخت که همزمان در همان Run رخ داده بود) شکست خورد. هر سه با کد واقعی تطبیق داده و تأیید شدند:
+
+### ۱. `VocabularyParserTest` — باگ واقعی در `VocabularyParser.kt` (تنها موردی که واقعاً باگ Parser بود)
+تست شماره‌گذاری با Gap (`24. palabra` / `29. otra palabra` / `47. tercera palabra`) انتظار داشت خروجی Orphan برابر با متن Strip‌شده (`palabra`) باشد، اما کد واقعی `orphanLines.add(entry.originalLines.joinToString("\n"))` را صدا می‌زد — یعنی متن خام هنوز شماره‌دار (`24. palabra`) را برمی‌گرداند، نه نسخه Strip‌شده که یک Entry موفق هم استفاده می‌کند (`entry.sourceText`). **تشخیص Boundary سه Entry (۲۴/۲۹/۴۷) از اول درست بود** — فقط متن ذخیره‌شده برای Orphan اشتباه بود. رفع: تغییر به `orphanLines.add(entry.sourceText)`.
+
+### ۲. `RestoreBackupUseCaseTest` («ConceptTag counted as new only the first time») — باگ در Fixture تست، نه در `RestoreBackupUseCase`
+تست یک `Tag` مستقیماً در دیتابیس مقصد insert می‌کرد ولی هیچ‌وقت آن را داخل خودِ `ExportData` (`tags`) نمی‌گذاشت — و تابع کمکی `fullExport()` این تست اصلاً پارامتر `tags` نداشت. `validateBackup()` به‌درستی هر Backup‌ای که یک `ConceptTag` به `tagId` خارج از لیست `tags` همان Backup ارجاع دهد را نامعتبر می‌داند (سازگاری ارجاعی داخلیِ خودِ Export، نه وابسته به این‌که مقصد از قبل آن UUID را دارد یا نه) — پس `restoreBackup` یک `RestoreResult.Error` برمی‌گرداند، و `as RestoreResult.Success` با `ClassCastException` می‌ترکید. رفع: پارامتر `tags` به `fullExport()` اضافه شد و همین تست حالا `tags = listOf(tag)` هم می‌فرستد. منطق شمارش ConceptTag در خودِ UseCase از اول درست بوده.
+
+### ۳. `BackupRestoreIntegrationTest` («full backup ... restores completely») — باگ در همین فایل تست، نه در Backup/Restore واقعی
+تست یک `SubmitReviewAnswerRequest` با یک `sessionId` تصادفی می‌فرستاد بدون این‌که هرگز یک `ReviewSession` واقعی با همان id در دیتابیس Source بسازد. `validateBackup()` به‌درستی هر `ReviewHistory.sessionId` خارج از `reviewSessions` همان Backup را نامعتبر می‌داند؛ پس FULL Backup تولیدشده نامعتبر بود و Restore با `Error` برمی‌گشت، نه `Success`. رفع: قبل از فراخوانی `submitAnswerInSource`، یک `ReviewSession` واقعی با همون `sessionId` در `source.reviewSessionRepository` insert می‌شود؛ یک assertion جدید (`backup.reviewSessions.size == 1`) هم اضافه شد تا این پیش‌شرط دیگر خاموش نماند.
+
+### جمع‌بندی
+از ۳ Failure، فقط مورد ۱ واقعاً باگ در کد تولیدی (Parser) بود. موارد ۲ و ۳ نشان دادند خودِ `validateBackup()` دقیقاً طبق قرارداد Algorithms §۹ عمل می‌کند (سازگاری ارجاعی داخلی Backup را جدی می‌گیرد)؛ Fixtureهای تست فازهای ۲۹ بودند که این قرارداد را رعایت نکرده بودند. این الگو خودش دلگرم‌کننده است: هرچه لایه‌های عمیق‌تر (Validation، Atomicity) بیشتر با CI واقعی محک می‌خورند، باگ کمتری در منطق اصلی و بیشتر در Fixtureهای ساده‌انگارانه‌ی تست پیدا می‌شود.
 
 ## نکات فنی مهم برای مراحل بعد
 

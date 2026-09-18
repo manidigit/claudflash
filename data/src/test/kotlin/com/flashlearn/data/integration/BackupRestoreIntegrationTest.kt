@@ -2,6 +2,7 @@ package com.flashlearn.data.integration
 
 import com.flashlearn.database.FLASHLEARN_SCHEMA_VERSION
 import com.flashlearn.domain.model.BackupType
+import com.flashlearn.domain.model.ReviewSession
 import com.flashlearn.domain.model.ReviewType
 import com.flashlearn.domain.model.Stage
 import com.flashlearn.domain.usecase.CreateBackupUseCase
@@ -107,9 +108,25 @@ class BackupRestoreIntegrationTest {
 
         val conceptId = createConceptInSource(CreateConceptCommand(sourceText = "hola", targetText = "سلام"))
         createConceptInSource(CreateConceptCommand(sourceText = "adiós", targetText = "خداحافظ"))
+
+        // A FULL backup must be internally referentially consistent
+        // (validateBackup checks every ReviewHistory.sessionId is in the
+        // backup's own reviewSessions) — a real ReviewSession row must
+        // exist before submitting an answer under that sessionId, not
+        // just a bare UUID. Bug found via a real CI test failure: this
+        // test previously skipped creating the session, so the produced
+        // backup was invalid and Restore correctly returned Error, which
+        // then failed the `result is RestoreResult.Success` assertion below.
+        val sessionId = UUID.randomUUID()
+        source.reviewSessionRepository.insert(
+            ReviewSession(
+                id = sessionId, startedAt = Instant.parse("2026-09-18T08:55:00Z"),
+                endedAt = null, reviewType = ReviewType.DAILY
+            )
+        )
         submitAnswerInSource(
             SubmitReviewAnswerRequest(
-                conceptId = conceptId, sessionId = UUID.randomUUID(), reviewAttemptId = UUID.randomUUID(),
+                conceptId = conceptId, sessionId = sessionId, reviewAttemptId = UUID.randomUUID(),
                 reviewType = ReviewType.DAILY, isCorrect = true, reviewedAt = Instant.parse("2026-09-18T09:00:00Z")
             )
         )
@@ -117,6 +134,7 @@ class BackupRestoreIntegrationTest {
         val backup = createBackupUseCase(source)(BackupType.FULL, FLASHLEARN_SCHEMA_VERSION, Instant.now())
         assertEquals(2, backup.concepts.size)
         assertEquals(4, backup.contents.size)
+        assertEquals(1, backup.reviewSessions.size)
         assertEquals(1, backup.reviewHistory.size)
 
         val result = restoreBackupUseCase(target)(
