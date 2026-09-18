@@ -20,13 +20,23 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+}
 
+// KSP's own DSL extension is a top-level Gradle extension registered by
+// the `com.google.devtools.ksp` plugin — it is NOT a member of the
+// Android Gradle Plugin's `LibraryExtension` (the `android { }` block
+// above). It must sit as a sibling of `android { }` and `dependencies { }`.
+// Bug found and fixed 2026-09-18: this was previously nested *inside*
+// `android { }`, which fails at Gradle script compilation with
+// "Unresolved reference: ksp" and blocks Configuration for the entire
+// build (every other module depends on :database). Caught by an external
+// build audit — none of this project's own tests could ever have caught
+// it, since nothing in this sandboxed environment actually runs Gradle.
+ksp {
     // Room schema export location (kept out of VCS via .gitignore; used
     // only for Room's internal schema-diffing during Migration work).
-    ksp {
-        arg("room.schemaLocation", "$projectDir/schemas")
-        arg("room.generateKotlin", "true")
-    }
+    arg("room.schemaLocation", "$projectDir/schemas")
+    arg("room.generateKotlin", "true")
 }
 
 dependencies {

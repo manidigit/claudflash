@@ -1,6 +1,6 @@
 # FlashLearn — Progress Tracker (بازنویسی کامل v5.0)
 
-**آخرین به‌روزرسانی:** 2026-09-18 (فاز ۳۱ — بعد از تکمیل ۳۰ فاز اصلی)
+**آخرین به‌روزرسانی:** 2026-09-18 (فاز ۳۲ — رفع باگ‌های Build)
 **مرجع مشخصات:** Algorithms v4.20 + Descriptions v4.20
 **نوع کار:** بازنویسی کامل از صفر (نه ادامه کد قبلی v4.36)
 **تقسیم‌بندی:** ۳۰ مرحله؛ هر مرحله یک zip کامل و قابل build
@@ -443,6 +443,56 @@ Quiz mode + انتخابگر واقعی نوع/حالت مرور، روی هما
 **عمداً تغییر نکرد:** هیچ Consumer فعلی (`GenerateQuizQuestionUseCase`، Flashcard Content) به `LanguagePairRepository.getActive()` وصل نشد — همه هنوز از `defaultV1LanguagePair()` هاردکد استفاده می‌کنند. این فاز فقط داده را آماده کرد؛ وصل‌کردن واقعی Consumerها (که یعنی تغییر Constructor چند UseCase موجود) یک تصمیم/تغییر جدا و بزرگ‌تر است که عمداً اینجا انجام نشد.
 
 **شکاف باز باقی‌مانده (تازه):** جدول `languages` (نام نمایشی es/fa/en) هنوز Seed نمی‌شود — چون `LanguagePairEntity.sourceLanguage/targetLanguage` رشته کد خام هستند (نه Foreign Key به `Language.id`، طبق تصمیم فاز ۱۶/۱۷)، این گپ فعلاً هیچ Consumer واقعی را مسدود نمی‌کند و لازم نبود در همین قدم حل شود.
+
+## فاز ۳۲ (بعد از v1.1.0 — تکمیل‌شده): رفع ۳ باگ واقعی Build + یک باگ در فرآیند تحویل خودم
+
+یک ممیزی خارجی (نه توسط من) روی یکی از zipهای تحویل‌داده‌شده اجرا شد و
+۳ مشکل قطعی Build را در کد پروژه پیدا کرد — هر سه تأیید و رفع شدند. در
+حین بررسی، یک چهارمین مشکل هم پیدا شد که مال خود این چت بود، نه پروژه.
+
+### ۱. `ksp { }` به‌اشتباه داخل `android { }` در `database/build.gradle.kts`
+KSP یک Extension سطح-بالای Gradle است، نه عضوی از `LibraryExtension`
+(بلاک `android {}`). این خطا در فاز Configuration خودِ Gradle رخ می‌داد
+(«Unresolved reference: ksp») و چون همه ماژول‌ها به `:database` وابسته‌اند،
+کل Build حتی وارد Configuration هم نمی‌شد. **این باگ از همون فازی که
+`room.schemaLocation` اضافه شد وجود داشته و توسط هیچ‌کدام از بررسی‌های
+من (که فقط تعادل براکت‌ها را چک می‌کردند، نه معنای واقعی Gradle DSL) قابل
+کشف نبود** — چون من در این محیط sandbox امکان اجرای واقعی Gradle را ندارم.
+رفع: `ksp {}` به سطح top-level (هم‌ردیف `android{}` و `dependencies{}`) منتقل شد.
+
+### ۲. عدم وجود Dependency واقعی برای `Theme.Material3.DayNight.NoActionBar`
+این Style از کتابخانه کلاسیک `com.google.android.material:material` می‌آید،
+نه از `androidx.compose.material3` (که فقط Compose است و هیچ XML Style‌ای
+منتشر نمی‌کند). بدون این Dependency، AAPT2 هنگام Resource Linking با خطای
+«style not found» شکست می‌خورد. رفع: `implementation("com.google.android.material:material:1.11.0")` به `app/build.gradle.kts` اضافه شد.
+
+### ۳. `androidTestImplementation("androidx.compose.ui:ui-test-junit4")` بدون نسخه
+`androidTestImplementation`، برخلاف `debugImplementation`، از `implementation`
+ارث‌بری Constraint نمی‌کند؛ پس BOM ایمپورت‌شده در `implementation(platform(...))`
+روی آن اعمال نمی‌شد و این Dependency بدون نسخه Resolve نمی‌شد. رفع:
+`androidTestImplementation(platform("androidx.compose:compose-bom:2024.02.00"))`
+جدا اضافه شد.
+
+### ۴. باگ در فرآیند تحویل خودِ من (نه در کد پروژه): `.github` و `.gitignore` از هر zip حذف می‌شدند
+ممیزی خارجی همچنین ادعا کرده بود `.github/workflows/android-ci.yml` و
+`.gitignore` در پروژه وجود ندارند — این ادعا درباره‌ی **کد پروژه غلط**
+بود (هر دو فایل همیشه در `docs/PROGRESS_TRACKER.md`/کد موجود بودند)، اما
+ریشه‌ی واقعی گزارش درست بود: من در دستور ساخت هر zip از
+`zip -r ... FlashLearn -x "*.git*"` استفاده می‌کردم تا پوشه `.git` را
+حذف کنم (که این پروژه اصلاً هیچ‌وقت نداشت — هرگز `git init` نشده). پترن
+`*.git*` علاوه بر `.git`، با `.github` هم مچ می‌شود (چون `.github` با
+`.git` شروع می‌شود)، پس **هر زیپی که از فاز ۲۷ تا ۳۱ تحویل داده شد،
+`.github/workflows/android-ci.yml` و `.gitignore` را نداشت** — با اینکه
+هر دو در کدِ روی دیسک همیشه درست و کامل بودند. رفع: exclude اشتباه از
+دستور zip کاملاً حذف شد (چون اصلاً `.git` وجود ندارد، نیازی به exclude
+هم نیست). **از این zip به بعد، `.github` و `.gitignore` واقعاً داخل
+فایل تحویلی هستند — لطفاً محتوای zip قبلی را با این جایگزین کنید.**
+
+### چیزی که رفع نشد چون تأیید نشد
+ممیزی همچنین «مشکوک» بودن نسخه Hilt+KSP (۲.۴۸) و ریسک شبکه Robolectric
+در CI را مطرح کرد؛ این‌ها بدون اجرای واقعی Gradle قابل تأیید/رد نیستند
+(خودِ گزارش هم آن‌ها را «نیازمند تست» برچسب زده بود، نه «قطعی»)، پس
+دست‌نخورده باقی ماندند — منتظر یک اجرای واقعی CI روی همین commit.
 
 ## نکات فنی مهم برای مراحل بعد
 

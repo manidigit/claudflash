@@ -31,13 +31,20 @@ gradle clean assembleDebug
 gradle test
 ```
 
-CI (`.github/workflows/`) دقیقاً همین دو دستور را روی هر push/PR اجرا
-می‌کند — بدون نیاز به Emulator، چون تست‌های یکپارچگی روی Room واقعی هم
-از طریق Robolectric به‌صورت تست Unit معمولی اجرا می‌شوند (جزئیات کامل
-در «جزئیات فاز ۲۹» در تراکر).
+این پروژه عمداً **بدون Gradle Wrapper** (`gradlew`) commit شده — تصمیم
+ثبت‌شده در تراکر (۲۰۲۶-۰۹-۱۳): تولید باینری واقعی `gradle-wrapper.jar` در
+محیطی بدون Android Studio ممکن نبود. برای اجرای محلی:
+- یا Gradle **8.2** را سراسری نصب کنید (همون نسخه‌ای که CI هم پین کرده)،
+- یا یک‌بار `gradle wrapper --gradle-version 8.2` را اجرا کنید تا خودتان Wrapper را بسازید و کامیت کنید.
 
-نیازمندی‌ها: JDK 17، Gradle 8.2+، Android SDK (compileSdk 34،
-minSdk 26).
+CI (`.github/workflows/android-ci.yml`) دقیقاً همین دو دستور را روی هر
+push/PR اجرا می‌کند، از طریق `gradle/actions/setup-gradle` (بدون نیاز
+به Wrapper) — بدون نیاز به Emulator، چون تست‌های یکپارچگی روی Room واقعی
+هم از طریق Robolectric به‌صورت تست Unit معمولی اجرا می‌شوند (جزئیات
+کامل در «جزئیات فاز ۲۹» در تراکر).
+
+نیازمندی‌ها: JDK 17، Gradle 8.2 (سراسری، تا وقتی Wrapper ساخته نشده)،
+Android SDK (compileSdk 34، minSdk 26).
 
 ## وضعیت فعلی
 

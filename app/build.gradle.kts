@@ -13,8 +13,8 @@ android {
         applicationId = "com.flashlearn.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -70,6 +70,17 @@ dependencies {
 
     implementation("androidx.navigation:navigation-compose:2.7.6")
 
+    // Theme.FlashLearn's parent (Theme.Material3.DayNight.NoActionBar, in
+    // themes.xml) is an XML style published by the CLASSIC View-system
+    // Material Components library, not by androidx.compose.material3
+    // (Compose-only, publishes zero XML resources). Without this,
+    // AAPT2 resource-linking fails with "style not found" and the app
+    // module never builds — even though every Compose material3 API call
+    // in the codebase itself compiles fine. This dependency exists purely
+    // so the Activity has a valid pre-Compose window theme; found missing
+    // by an external build audit 2026-09-18.
+    implementation("com.google.android.material:material:1.11.0")
+
     implementation("com.google.dagger:hilt-android:2.48")
     ksp("com.google.dagger:hilt-android-compiler:2.48")
     implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
@@ -77,5 +88,12 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    // androidTestImplementation does NOT extend implementation (unlike
+    // debugImplementation, which does) — a platform()/BOM import only
+    // constrains configurations that either extend the one it was
+    // declared on or import it themselves. Without this line,
+    // ui-test-junit4 below has no version and fails dependency
+    // resolution. Found missing by an external build audit 2026-09-18.
+    androidTestImplementation(platform("androidx.compose:compose-bom:2024.02.00"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 }
