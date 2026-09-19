@@ -1,6 +1,6 @@
 # FlashLearn — Progress Tracker (بازنویسی کامل v5.0)
 
-**آخرین به‌روزرسانی:** 2026-09-18 (فاز ۳۵ — رفع ۳ Failure واقعی تست)
+**آخرین به‌روزرسانی:** 2026-09-19 (فاز ۳۷ — مورد ۵: Import/Export CSV)
 **مرجع مشخصات:** Algorithms v4.20 + Descriptions v4.20
 **نوع کار:** بازنویسی کامل از صفر (نه ادامه کد قبلی v4.36)
 **تقسیم‌بندی:** ۳۰ مرحله؛ هر مرحله یک zip کامل و قابل build
@@ -577,6 +577,50 @@ top-level قابل import — داخل `Row{}`/`Column{}` خودکار در دس
 
 ### جمع‌بندی
 از ۳ Failure، فقط مورد ۱ واقعاً باگ در کد تولیدی (Parser) بود. موارد ۲ و ۳ نشان دادند خودِ `validateBackup()` دقیقاً طبق قرارداد Algorithms §۹ عمل می‌کند (سازگاری ارجاعی داخلی Backup را جدی می‌گیرد)؛ Fixtureهای تست فازهای ۲۹ بودند که این قرارداد را رعایت نکرده بودند. این الگو خودش دلگرم‌کننده است: هرچه لایه‌های عمیق‌تر (Validation، Atomicity) بیشتر با CI واقعی محک می‌خورند، باگ کمتری در منطق اصلی و بیشتر در Fixtureهای ساده‌انگارانه‌ی تست پیدا می‌شود.
+
+## فاز ۳۶ (بعد از v1.1.4): رفع شکاف‌های ۱ تا ۴ از README
+
+کاربر خواست ۶ شکاف باقی‌مانده README یکی‌یکی رفع شوند. این فاز موارد ۱ تا ۴ را انجام داد.
+
+### مورد ۲ — انتخاب Category در AddWord (اول انجام شد، کوچک‌ترین بود)
+- `AddWordUiState`: دو فیلد جدید `categories: List<Category>` و `selectedCategoryId: UUID?`.
+- `AddWordViewModel`: `GetAllCategoriesUseCase` تزریق و در `init` لود شد؛ `onCategorySelected(id)` اضافه شد؛ `saveManualEntry()` حالا `categoryId` را هم به `CreateConceptCommand` می‌فرستد. بعد از ذخیره موفق، برخلاف قبل (که کل State را Reset می‌کرد)، لیست دسته‌بندی‌ها و انتخاب فعلی حفظ می‌شود — چون احتمالاً کاربر چند کلمه پشت‌سرهم به همون دسته اضافه می‌کند.
+- `AddWordScreen`: یک `ExposedDropdownMenuBox` («دسته‌بندی (اختیاری)») با گزینه «بدون دسته‌بندی».
+
+### مورد ۴ — وصل کردن LanguagePair واقعی
+- `GetActiveLanguagePairUseCase` جدید (دامنه): `languagePairRepository.getActive() ?: defaultV1LanguagePair()`. این اولین Consumer واقعی `LanguagePairRepository` در کل پروژه است.
+- `ReviewViewModel`: دیگر `defaultV1LanguagePair()` مستقیم صدا نمی‌زند — یک‌بار در `start()` واقعی از Repository می‌خواند (`activeLanguagePair`) و همان را هم به `getFlashcardContent(conceptId, sourceLanguage, targetLanguage)` و هم به `generateQuizQuestion(concept, activeLanguagePair, ...)` می‌دهد.
+- توجه: چون فاز ۳۱ همیشه یک ردیف واقعی Seed می‌کند، Fallback به `defaultV1LanguagePair()` در عمل هرگز اجرا نمی‌شود؛ فقط برای تست‌هایی که از Fake Repository خالی استفاده می‌کنند نگه داشته شده.
+
+### مورد ۳ — Achievement Check بعد از هر Review
+- `ReviewViewModel`: `CheckAndUnlockAchievementsUseCase` تزریق شد و **یک‌بار وقتی Session تمام می‌شود** (نه بعد از تک‌تک کارت‌ها) صدا زده می‌شود — تصمیم آگاهانه: سند هر دو نقطه («بعد از هر پاسخ» یا «باز شدن صفحه Statistics») را مجاز می‌داند؛ چک‌کردن یک‌بار در پایان Session با رفتار `ProgressViewModel` (یک‌بار در باز شدن صفحه) قرینه است و از نمایش Popup بعد از هر تک‌کارت جلوگیری می‌کند.
+- `ReviewUiState.Finished` یک فیلد `newlyUnlockedCount` گرفت؛ `ReviewScreen` در صورت `> 0` یک خط «🏆 N دستاورد جدید باز شد!» نشان می‌دهد.
+- `ProgressViewModel` هم همچنان چک می‌کند — الان یک نقطه تریگر دوم و بی‌ضرر است، نه تنها نقطه.
+
+### مورد ۱ — UI برای Backup/Restore (بزرگ‌ترین مورد)
+تصمیم معماری اصلی: فرمت فایل فقط **JSON** (نه CSV/XLSX/SQLite که مورد ۵ است). یک لایه DTO کاملاً جدا در `data` ساخته شد تا مدل‌های `domain` هیچ Annotation کتابخانه Serialization نگیرند (طبق اصل خلوص `domain`، §۳.۳):
+- `build.gradle.kts` (ریشه) + `data/build.gradle.kts`: پلاگین و کتابخانه `kotlinx.serialization` اضافه شد (فقط در `data`).
+- `data/backup/BackupJsonCodec.kt`: ۱۳ کلاس DTO خصوصی (آینه‌ی `ExportData` و مدل‌های داخلش، با UUID/Instant به‌صورت String) + `encode`/`decode`. خطای Parse یا Enum نامعتبر به `BackupFileFormatException` تبدیل می‌شود (نه کرش خام).
+- `data/backup/SafetyBackupStore.kt`: تنها بخش Android-specific این قابلیت (نیاز به `Context` برای نوشتن در `filesDir/safety_backups/`) — عمداً در `data` نگه داشته شد تا `BackupViewModel` طبق قانون §۳.۴ («ViewModel هیچ ارجاعی به Android ندارد») پاک بماند.
+- `app/presentation/backup/BackupViewModel.kt`: دو تابع `suspend fun exportBackup(): String` و `suspend fun restoreBackup(json: String)` — هیچ‌کدام `Uri`/`Context` نمی‌بینند؛ فقط String می‌گیرند/می‌دهند.
+- `SettingsScreen.kt`: بخش «پشتیبان‌گیری» با دو دکمه. خواندن/نوشتن فایل واقعی (`ActivityResultContracts.CreateDocument`/`OpenDocument` + `ContentResolver`) کاملاً در همین Composable انجام می‌شود، نه در ViewModel.
+- تست: `BackupJsonCodecTest` (۵ مورد، خالص Kotlin بدون Robolectric — round-trip کامل + ۳ حالت فایل خراب/نامعتبر).
+
+### باقی‌مانده: موارد ۵ و ۶
+مورد ۵ (Import/Export چندفرمتی CSV/XLSX/SQLite) و مورد ۶ (Backlog صریح سند مثل Quiz Difficulty مستقل) هنوز انجام نشده‌اند — فازهای بعدی.
+
+## فاز ۳۷ (بعد از v1.2.0): مورد ۵ — Import/Export با فرمت CSV
+
+طبق Algorithms §۹ چهار فرمت لازم است: CSV، JSON، XLSX، SQLite. JSON در فاز ۳۶ (Backup/Restore) پوشش داده شد. این فاز فقط **CSV** را اضافه کرد؛ XLSX و SQLite عمداً پیاده‌سازی نشدند (توضیح در پایین).
+
+- `domain/csv/VocabularyCsv.kt`: فرمت خالص CSV (`source,target,notes`)، کاملاً بدون وابستگی به Repository — دقیقاً مثل `VocabularyParser` یک تابع خالص و مستقل تست‌پذیر. شامل Escape/Parse صحیح RFC-4180 (کاما و کوتیشن داخل مقادیر). فرمت تعمداً ساده و تک‌جفت‌زبانه است؛ Breakdown/GrammarNote/Category را حمل نمی‌کند — آن داده‌های غنی‌تر فقط از طریق Backup کامل JSON (فاز ۳۶) Round-trip می‌شوند.
+- `domain/usecase/VocabularyCsvUseCases.kt`: `ExportVocabularyCsvUseCase` (می‌خواند از `ConceptRepository`/`ContentRepository` طبق LanguagePair فعال) و `ImportVocabularyCsvUseCase` — این یکی **هیچ منطق Duplicate/Merge جدیدی ننوشت**؛ هر ردیف CSV را به یک `ParsedEntry` تبدیل و مستقیماً به همان `ImportParsedEntryUseCase` فاز ۲۴ می‌دهد (همان مسیر Create/Merge/Conflict که Paste-Text هم استفاده می‌کند).
+- `app/presentation/backup/VocabularyCsvViewModel.kt` + بخش جدید در `SettingsScreen`: دقیقاً همان معماری «ViewModel فقط String می‌بیند، I/O واقعی فایل در Composable» که Backup JSON (فاز ۳۶) دارد.
+- تست‌ها: `VocabularyCsvTest` (۷ مورد، خالص) + `VocabularyCsvUseCasesTest` (۴ مورد، با Fake Repository).
+
+### چرا XLSX و SQLite پیاده نشدند
+- **XLSX:** نیازمند Apache POI است — کتابخانه‌ای سنگین (چند مگابایت + وابستگی‌های فرعی زیاد) که سازگاری کاملش با Android شناخته‌شده مشکل‌دار است (به کلاس‌های `javax.xml`/`java.awt` نیاز دارد که در Android موجود نیستند؛ معمولاً یا از `poi-ooxml-lite` یا از یک Fork مخصوص Android باید استفاده کرد). چون این محیط sandbox امکان اجرای واقعی Gradle/تست روی دستگاه ندارد، افزودن این کتابخانه بدون توانایی واقعاً تست‌کردنش ریسک بالایی دارد که دقیقاً همون الگوی مشکلاتی رو تکرار کنه که در فازهای ۳۲ تا ۳۵ (باگ‌های واقعی که فقط CI پیدا کرد) دیدیم.
+- **SQLite:** «Import از فایل SQLite دلخواه» یعنی نگاشتِ Schema ناشناس کاربر (چه ستون‌هایی، چه نام جدولی) به مدل داخلی — این تصمیم Schema-mapping در هیچ‌کدام از دو سند مشخص نشده و اختراع یک قرارداد جدید برای آن، دقیقاً همون «کار اختراعی بدون ثبت تصمیم» است که قانون ۰ تراکر منعش کرده.
 
 ## نکات فنی مهم برای مراحل بعد
 

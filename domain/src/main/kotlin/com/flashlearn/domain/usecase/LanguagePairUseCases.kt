@@ -1,6 +1,7 @@
 package com.flashlearn.domain.usecase
 
 import com.flashlearn.domain.model.LanguagePair
+import com.flashlearn.domain.model.defaultV1LanguagePair
 import com.flashlearn.domain.repository.LanguagePairRepository
 import java.util.UUID
 import javax.inject.Inject
@@ -43,4 +44,22 @@ class EnsureDefaultLanguagePairUseCase @Inject constructor(
         languagePairRepository.insert(pair)
         return pair
     }
+}
+
+/**
+ * Read the current active [LanguagePair], falling back to
+ * [defaultV1LanguagePair] if somehow none is active yet (repository read
+ * failure, or a test using a Fake repository that was never seeded —
+ * production code always has a real seeded row after
+ * [EnsureDefaultLanguagePairUseCase] runs at app startup, so this
+ * fallback should never actually trigger there). This is what closes the
+ * README/tracker gap "هیچ Consumer واقعی هنوز از LanguagePairRepository
+ * نمی‌خواند" — [com.flashlearn.app.presentation.review.ReviewViewModel]
+ * is the first real caller.
+ */
+class GetActiveLanguagePairUseCase @Inject constructor(
+    private val languagePairRepository: LanguagePairRepository
+) {
+    suspend operator fun invoke(): LanguagePair =
+        languagePairRepository.getActive() ?: defaultV1LanguagePair()
 }

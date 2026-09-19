@@ -176,6 +176,10 @@ private fun FinishedContent(state: ReviewUiState.Finished, onBack: () -> Unit) {
         Text("پایان مرور", style = MaterialTheme.typography.titleLarge)
         Spacer(modifier = Modifier.height(8.dp))
         Text("${state.correctCount} از ${state.totalCount} درست", style = MaterialTheme.typography.bodyLarge)
+        if (state.newlyUnlockedCount > 0) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("🏆 ${state.newlyUnlockedCount} دستاورد جدید باز شد!", style = MaterialTheme.typography.bodyLarge)
+        }
         Spacer(modifier = Modifier.height(24.dp))
         Button(onClick = onBack) { Text("بازگشت به خانه") }
     }

@@ -57,6 +57,8 @@ sealed interface ReviewUiState {
     data class Finished(
         val reviewType: ReviewType,
         val correctCount: Int,
-        val totalCount: Int
+        val totalCount: Int,
+        /** How many Achievements this session's [com.flashlearn.domain.usecase.CheckAndUnlockAchievementsUseCase] call newly unlocked — 0 is the common case. */
+        val newlyUnlockedCount: Int = 0
     ) : ReviewUiState
 }

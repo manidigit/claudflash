@@ -47,3 +47,28 @@ class EnsureDefaultLanguagePairUseCaseTest {
         assertEquals(1, repository.getAll().size)
     }
 }
+
+class GetActiveLanguagePairUseCaseTest {
+
+    @Test
+    fun `returns the repository's active pair when one exists`() = runTest {
+        val repository = FakeLanguagePairRepository()
+        val active = LanguagePair(id = UUID.randomUUID(), sourceLanguage = "en", targetLanguage = "fa", isActive = true)
+        repository.insert(active)
+
+        val result = GetActiveLanguagePairUseCase(repository)()
+
+        assertEquals(active, result)
+    }
+
+    @Test
+    fun `falls back to the default V1 pair when nothing is active`() = runTest {
+        val repository = FakeLanguagePairRepository()
+
+        val result = GetActiveLanguagePairUseCase(repository)()
+
+        assertEquals("es", result.sourceLanguage)
+        assertEquals("fa", result.targetLanguage)
+        assertTrue(result.isActive)
+    }
+}

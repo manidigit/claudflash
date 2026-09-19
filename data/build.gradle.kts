@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
+    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 android {
@@ -27,6 +28,13 @@ dependencies {
     implementation(project(":domain"))
     implementation(project(":database"))
     implementation(project(":core"))
+
+    // Backup/Restore file export-import (README/tracker gap #1): plain
+    // Kotlin JSON serialization, no reflection, kept entirely in `data`
+    // (Backup/Restore/Import-Export is this module's own stated
+    // responsibility) — domain models stay free of any serialization
+    // library annotation via a dedicated DTO layer, see backup/BackupJsonCodec.kt.
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
 
     implementation("com.google.dagger:hilt-android:2.48")
     ksp("com.google.dagger:hilt-android-compiler:2.48")

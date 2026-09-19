@@ -1,6 +1,8 @@
 package com.flashlearn.app.presentation.addword
 
+import com.flashlearn.domain.model.Category
 import com.flashlearn.domain.parser.ParsedEntry
+import java.util.UUID
 
 /** Which half of the AddWord screen is active. */
 enum class AddWordMode { MANUAL, PASTE }
@@ -22,6 +24,10 @@ data class AddWordUiState(
     val manualNotes: String = "",
     val manualSaveError: String? = null,
     val manualSavedSuccessfully: Boolean = false,
+
+    // Category (optional — null means "no category", same as CreateConceptCommand's default)
+    val categories: List<Category> = emptyList(),
+    val selectedCategoryId: UUID? = null,
 
     // Paste Text mode (Algorithms v4.20 Parser P0 + ResolveConceptForParsedEntry)
     val pasteText: String = "",
