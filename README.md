@@ -1,4 +1,4 @@
-# FlashLearn
+# Claudemani
 
 اپلیکیشن Android آفلاین یادگیری واژگان اسپانیایی↔فارسی با فلش‌کارت،
 مرور چهارگزینه‌ای (Quiz) و Spaced Repetition. کاملاً Offline-First —

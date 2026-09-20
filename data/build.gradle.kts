@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.flashlearn.data"
+    namespace = "com.claudemani.data"
     compileSdk = 34
 
     defaultConfig {

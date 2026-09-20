@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "FlashLearn"
+rootProject.name = "Claudemani"
 
 include(":app")
 include(":core")

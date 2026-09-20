@@ -46,7 +46,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: flashlearn-debug-apk
+          name: claudemani-debug-apk
           path: dist/*.apk
           if-no-files-found: warn
 

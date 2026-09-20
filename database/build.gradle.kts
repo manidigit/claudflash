@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.flashlearn.database"
+    namespace = "com.claudemani.database"
     compileSdk = 34
 
     defaultConfig {

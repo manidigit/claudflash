@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.flashlearn.app"
+    namespace = "com.claudemani.app"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.flashlearn.app"
+        applicationId = "com.claudemani.app"
         minSdk = 26
         targetSdk = 34
         versionCode = 14

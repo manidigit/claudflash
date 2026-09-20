@@ -1,4 +1,4 @@
-# FlashLearn — Progress Tracker (بازنویسی کامل v5.0)
+# Claudemani — Progress Tracker (بازنویسی کامل v5.0)
 
 **آخرین به‌روزرسانی:** 2026-09-20 (فاز ۴۲ — رفع تست CSV؛ اولین `assembleDebug` موفق روی v1.4.3)
 **مرجع مشخصات:** Algorithms v4.20 + Descriptions v4.20
@@ -23,7 +23,7 @@
 | 2 | Domain Models/Enums | **Done** | 2026-09-13 |
 | 3 | Learning Transition Algorithm + Test | **Done** | 2026-09-13 |
 | 4 | Difficulty Calculation Algorithm + Test | **Done** | 2026-09-13 |
-| 5 | Repository Interfaces + FlashLearnDatabase | **Done** | 2026-09-13 |
+| 5 | Repository Interfaces + ClaudemaniDatabase | **Done** | 2026-09-13 |
 | 6 | Room Entities + TypeConverters | **Done** | 2026-09-13 |
 | 7 | Room DAOها | **Done** | 2026-09-13 |
 | 8 | Room Database + Migrations | **Done** | 2026-09-13 |
@@ -61,7 +61,7 @@
 - `database`: Room 2.6.1 با KSP (`room.generateKotlin=true`, نه kapt)
 - `data`: Hilt wiring آماده (هنوز Module واقعی ندارد — فاز ۲۱)
 - `app`: Compose (BOM 2024.02.00) + Navigation Compose 2.7.6 + Hilt + `hilt-navigation-compose`
-- `MainActivity`/`FlashLearnApplication` فقط Skeleton — منطق واقعی در فاز ۲۲ به بعد
+- `MainActivity`/`ClaudemaniApplication` فقط Skeleton — منطق واقعی در فاز ۲۲ به بعد
 - `.gitignore`: local.properties، keystore، google-services.json، build/، schemas/ پوشش داده شده
 - CI: `.github/workflows/android-ci.yml` — از `gradle/actions/setup-gradle` استفاده می‌کند
   (بدون نیاز به commit کردن Gradle wrapper باینری)؛ marshalling APK به `dist/` مطابق تصمیم قبلی پروژه
@@ -69,13 +69,13 @@
 
 ## جزئیات فاز ۲ (تکمیل‌شده)
 
-فایل‌های جدید در `domain/src/main/kotlin/com/flashlearn/domain/`:
+فایل‌های جدید در `domain/src/main/kotlin/com/claudemani/domain/`:
 
 - `model/Enums.kt` — Stage، VocabularyDifficulty (ordinal مهم است)، ReviewType، EntryType، AchievementType
 - `model/Concept.kt`, `Content.kt` (+ `computeCanonicalKey`), `LearningState.kt` (بدون فیلد difficulty)، `DifficultyState.kt`
 - `model/ReviewModels.kt` (ReviewSession + ReviewHistory)، `Category.kt` (+Tag+ConceptTag)، `Language.kt` (+LanguagePair)، `AppSetting.kt` (+SettingKeys)، `Achievement.kt`، `ProgressSummary.kt`
 - `algorithm/TransitionResult.kt` — فقط data class؛ خود تابع محاسبه در فاز ۳
-- `exception/FlashLearnExceptions.kt` — DataIntegrityException، DuplicateReviewAttemptException، ReviewNotDueException
+- `exception/ClaudemaniExceptions.kt` — DataIntegrityException، DuplicateReviewAttemptException، ReviewNotDueException
 
 تست‌های جدید: `ContentTest` (canonicalKey/accent)، `EnumsTest` (ordinal guard).
 
@@ -98,7 +98,7 @@
 
 ## جزئیات فاز ۵ (تکمیل‌شده)
 
-- `domain/repository/` — ۱۲ Interface: `FlashLearnDatabase` (transaction bridge)، `ConceptRepository` (+`findAnyById` برای Restore روی رکورد soft-deleted)، `ContentRepository`، `LearningStateRepository`، `DifficultyStateRepository`، `ReviewHistoryRepository`، `ReviewSessionRepository`، `CategoryRepository`/`TagRepository`/`ConceptTagRepository`، `LanguageRepository`/`LanguagePairRepository`، `SettingsRepository`، `AchievementRepository`.
+- `domain/repository/` — ۱۲ Interface: `ClaudemaniDatabase` (transaction bridge)، `ConceptRepository` (+`findAnyById` برای Restore روی رکورد soft-deleted)، `ContentRepository`، `LearningStateRepository`، `DifficultyStateRepository`، `ReviewHistoryRepository`، `ReviewSessionRepository`، `CategoryRepository`/`TagRepository`/`ConceptTagRepository`، `LanguageRepository`/`LanguagePairRepository`، `SettingsRepository`، `AchievementRepository`.
 - نام متدها دقیقاً مطابق اصلاح Phase 1 v4 (`get` نه `getByConceptId`، `upsert` برای Content، `insert(ConceptTag(...))` نه `addTagToConcept`).
 - **تصمیم معماری:** چون `id: UUID` مستقیماً Primary Key است (نه Long داخلی + UUID جدا)، `findByUuid` معادل `getById`/`findAnyById` است — پیچیدگی نگاشت ID اضافه نشد.
 - تست‌ها: `FakeRepositories.kt` (پیاده‌سازی in-memory، فقط زیر `src/test`) + `RepositoryContractRehearsalTest` که کل مسیر CreateConcept→SubmitReviewAnswer را با این Interfaceها و الگوریتم‌های فاز ۳/۴ به‌صورت end-to-end (بدون Room) تمرین می‌کند — تأیید می‌کند Interfaceها برای فاز ۱۰/۱۱ کافی‌اند.
@@ -126,17 +126,17 @@
 
 ## جزئیات فاز ۸ (تکمیل‌شده)
 
-- `FlashLearnRoomDatabase.kt` — کلاس `@Database` با هر ۱۳ Entity + ۱۳ DAO abstract fun، `FLASHLEARN_SCHEMA_VERSION = 1`، `exportSchema = true`.
+- `ClaudemaniRoomDatabase.kt` — کلاس `@Database` با هر ۱۳ Entity + ۱۳ DAO abstract fun، `CLAUDEMANI_SCHEMA_VERSION = 1`، `exportSchema = true`.
 - `migration/DatabaseMigrations.kt` — `ALL_MIGRATIONS` فعلاً خالی (نسخه ۱ = اولین انتشار)؛ رویه دقیق افزودن Migration بعدی در KDoc مستند شد.
-- `FlashLearnDatabaseCallback.kt` — Partial Unique Index روی `language_pairs(isActive) WHERE isActive=1` از طریق `RoomDatabase.Callback.onCreate` (طبق تصمیم فاز ۶).
-- تست: `FlashLearnRoomDatabaseTest` (schema version=1، ALL_MIGRATIONS خالی، DATABASE_NAME).
+- `ClaudemaniDatabaseCallback.kt` — Partial Unique Index روی `language_pairs(isActive) WHERE isActive=1` از طریق `RoomDatabase.Callback.onCreate` (طبق تصمیم فاز ۶).
+- تست: `ClaudemaniRoomDatabaseTest` (schema version=1، ALL_MIGRATIONS خالی، DATABASE_NAME).
 
-**نکته مهم برای فاز ۲۱ (Hilt Modules):** ساخت واقعی نمونه Room (`Room.databaseBuilder(...).addMigrations(*ALL_MIGRATIONS).addCallback(FlashLearnDatabaseCallback).build()`) در `data` module انجام می‌شود، نه اینجا — این ماژول فقط Schema را تعریف می‌کند.
+**نکته مهم برای فاز ۲۱ (Hilt Modules):** ساخت واقعی نمونه Room (`Room.databaseBuilder(...).addMigrations(*ALL_MIGRATIONS).addCallback(ClaudemaniDatabaseCallback).build()`) در `data` module انجام می‌شود، نه اینجا — این ماژول فقط Schema را تعریف می‌کند.
 
 ## جزئیات فاز ۹ (تکمیل‌شده)
 
 - `data/mapper/` — ۱۰ فایل Mapper (object با `toDomain`/`toEntity`) برای هر ۱۳ Entity؛ enumها همه‌جا با `.name`/`.valueOf` تبدیل می‌شوند.
-- `data/repository/` — پیاده‌سازی کامل هر ۱۲ Repository Interface فاز ۵ + `FlashLearnDatabaseImpl` (روی `roomDb.withTransaction`). همه با `@Singleton @Inject constructor` — آماده Binding در فاز ۲۱ (هنوز خود Hilt Module نوشته نشده).
+- `data/repository/` — پیاده‌سازی کامل هر ۱۲ Repository Interface فاز ۵ + `ClaudemaniDatabaseImpl` (روی `roomDb.withTransaction`). همه با `@Singleton @Inject constructor` — آماده Binding در فاز ۲۱ (هنوز خود Hilt Module نوشته نشده).
 - `SettingsRepositoryImpl.getInt/getBoolean` مقدار پیش‌فرض را در نبود کلید یا parse ناموفق برمی‌گردانند.
 - تست: `MapperRoundTripTest` — تمام Mapperهای دارای enum (Concept/EntryType، LearningState/Stage، DifficultyState/VocabularyDifficulty، ReviewHistory+ReviewSession/ReviewType، Achievement/AchievementType) برای **هر مقدار enum** round-trip می‌شوند تا typo بین `.name` و `valueOf` فوراً مشخص شود.
 
@@ -220,13 +220,13 @@
 
 - **افزونه‌ی زیرساختی (۶ متد `getAll()`):** `ConceptRepository`، `ContentRepository`، `ConceptTagRepository`، `ReviewSessionRepository`، `DifficultyStateRepository`، `SettingsRepository` — همگی + DAO Query متناظر + Impl + Fake + (برای Concept: `getAll()` شامل رکوردهای Soft-deleted هم می‌شود، برخلاف `getAllActive()`). همچنین `FakeLanguageRepository`، `FakeLanguagePairRepository`، `FakeTagRepository` که قبلاً اصلاً وجود نداشتند به `FakeRepositories.kt` اضافه شدند.
 - `usecase/CreateBackupUseCase.kt` — فقط ساخت شیء `ExportData` در حافظه از روی وضعیت فعلی Repositoryها؛ VOCABULARY فقط جداول Vocabulary را پر می‌کند، PROGRESS فقط Progress را، FULL هر دو را (و شامل Conceptهای Soft-deleted هم می‌شود، چون یک Backup کامل باید بی‌کم‌وکاست باشد).
-- `usecase/RestoreBackupUseCase.kt` — دقیقاً طبق ترتیب سند (Languages→Categories→Tags→LanguagePairs→Concepts→Contents→ConceptTags→ReviewSessions→ReviewHistory→LearningStates→DifficultyStates→Settings→Achievements)، همه داخل یک `FlashLearnDatabase.withTransaction`. خروجی: `RestoreResult` (`Success(newCount,mergedCount)` / `AbortedByUser` / `Error(message)`).
+- `usecase/RestoreBackupUseCase.kt` — دقیقاً طبق ترتیب سند (Languages→Categories→Tags→LanguagePairs→Concepts→Contents→ConceptTags→ReviewSessions→ReviewHistory→LearningStates→DifficultyStates→Settings→Achievements)، همه داخل یک `ClaudemaniDatabase.withTransaction`. خروجی: `RestoreResult` (`Success(newCount,mergedCount)` / `AbortedByUser` / `Error(message)`).
 - **تصمیم آگاهانه‌ی مهم (I/O خارج از دامنه):** «Safety Backup قبل از Restore» طبق سند نیازمند ذخیره‌کردن یک فایل امن و پرسیدن از کاربر در صورت شکست است — هیچ‌کدام کار لایه Domain نیست. `RestoreBackupUseCase` این تصمیم را با دو پارامتر تابعی می‌گیرد: `persistSafetyBackup: suspend (ExportData) -> Boolean` و `confirmProceedWithoutSafetyBackup: suspend () -> Boolean`؛ منطق تصمیم‌گیری (بساز → تلاش برای ذخیره → اگر شکست خورد بپرس → لغو یا ادامه) همچنان داخل Domain است، فقط مکانیزم I/O و UI به لایه‌های بیرونی (فازی هنوز شماره‌گذاری‌نشده در تراکر) موکول شده.
 - **تصمیم آگاهانه (ReviewHistory در Restore):** سند برای Merge رکورد تکراری ReviewHistory دستور «Update» می‌دهد، اما `ReviewHistoryRepository` از فاز ۹ عمداً هیچ متد Update ندارد (Append-only). چون فیلدهای ReviewHistory هرگز نباید بعد از ثبت تغییر کنند، رکورد یافت‌شده با همان id عملاً «همان رویداد قبلاً ثبت‌شده» است — پس این حالت به‌عنوان یک Skip بی‌اثر پیاده شد (نه new، نه merged)، دقیقاً مثل حالت «متن یکسان» در Merge محتوا؛ قرارداد Append-only فاز ۹ حفظ شد.
 - **تصمیم آگاهانه (سادگی ناشی از فاز ۱۶):** چون `id` همان شناسه پایدار بین Backup/Restore است (نه یک ID داخلی جدا)، Restore برای اکثر جداول فقط «پیدا کن با همان id → اگر بود Update وگرنه Insert» است؛ فقط Content (طبق Appendix M: اول UUID سپس conceptId+languageCode) و LearningState/DifficultyState (کلید Merge واقعی‌شان `conceptId` است، نه `id`) رفتار Merge دقیق‌تری دارند.
 - **قانون ۵ (Progress Backup) پیاده‌شده:** برای یک Backup نوع PROGRESS، اگر Concept ارجاع‌داده‌شده توسط LearningState/DifficultyState/ReviewHistory در دیتابیس مقصد وجود نداشته باشد (چون در خودِ این Backup موجود نیست — طبق `conceptReferences`)، آن رکورد بی‌صدا Skip می‌شود، نه Error.
 - تست‌ها: `CreateBackupUseCaseTest` (۴ مورد) و `RestoreBackupUseCaseTest` (۱۲ مورد) — شامل Backup نامعتبر، تازه/تکراری بودن Restore (new در برابر merged)، سناریوی Safety Backup (شکست+لغو کاربر / شکست+تأیید کاربر)، Skip شدن رکورد Progress با Concept غائب، بازیابی رکورد Progress وقتی Concept از قبل موجود است، هر سه حالت Merge محتوا (شناسه یکسان، متن یکسان با شناسه متفاوت، متن متفاوت با شناسه متفاوت)، شمارش صحیح ConceptTag Idempotent، و تبدیل Exception به `Error` به‌جای Propagate شدن.
-- **محدودیت شناخته‌شده (ثبت‌شده برای بعد):** `FakeFlashLearnDatabase.withTransaction` واقعاً Rollback نمی‌کند (طبق KDoc خودش از فاز ۹)؛ بنابراین رفتار واقعی Rollback در برابر خطای وسط Transaction فقط با یک Room Instrumentation Test واقعی (نه Fake) قابل تأیید قطعی است — دقیقاً همان محدودیتی که فاز ۴ هم برای SubmitReviewAnswer ثبت کرده بود.
+- **محدودیت شناخته‌شده (ثبت‌شده برای بعد):** `FakeClaudemaniDatabase.withTransaction` واقعاً Rollback نمی‌کند (طبق KDoc خودش از فاز ۹)؛ بنابراین رفتار واقعی Rollback در برابر خطای وسط Transaction فقط با یک Room Instrumentation Test واقعی (نه Fake) قابل تأیید قطعی است — دقیقاً همان محدودیتی که فاز ۴ هم برای SubmitReviewAnswer ثبت کرده بود.
 
 ## جزئیات فاز ۱۸ (تکمیل‌شده)
 
@@ -244,7 +244,7 @@
 ## جزئیات فاز ۱۹ (تکمیل‌شده)
 
 - `domain/usecase/RefreshDataUseCase.kt` — پیاده‌سازی کامل §۷.X (Refresh/Data Migration Algorithm): برای هر Concept فعال + هر Content متعلق به آن، به‌صورت پله‌پله (`dataVersion+1` در هر مرحله) Migrationهای ثبت‌شده را اعمال می‌کند تا به نسخه فعلی برسد؛ Concept و Content کاملاً مستقل از هم پیش می‌روند (طبق مثال سند: Concept.dataVersion=4 و Content.dataVersion=2 با CURRENT متفاوت). خروجی: `Success(updatedCount)` / `NoChange` / `Error(message)`.
-- کل عملیات داخل یک `FlashLearnDatabase.withTransaction` است؛ Migration گم‌شده به‌جای بازگشت مستقیم Error، یک Exception داخلی پرتاب می‌کند تا Room واقعاً کل این اجرا را Rollback کند (نه اینکه فقط پیام خطا برگردد ولی رکوردهای قبلی همان اجرا نیمه‌Migrate بمانند) — همان الگویی که در فاز ۱۷ برای RestoreBackup هم استفاده شد.
+- کل عملیات داخل یک `ClaudemaniDatabase.withTransaction` است؛ Migration گم‌شده به‌جای بازگشت مستقیم Error، یک Exception داخلی پرتاب می‌کند تا Room واقعاً کل این اجرا را Rollback کند (نه اینکه فقط پیام خطا برگردد ولی رکوردهای قبلی همان اجرا نیمه‌Migrate بمانند) — همان الگویی که در فاز ۱۷ برای RestoreBackup هم استفاده شد.
 - **تصمیم آگاهانه (پارامتری‌کردن به‌جای ثابت‌های کامپایل‌تایم):** سند `CURRENT_CONCEPT_VERSION`/`CURRENT_CONTENT_VERSION` و لیست Migrationها را «ثابت سراسری» توصیف می‌کند، اما اینجا به‌صورت پارامتر Constructor (با مقدار پیش‌فرض ۰ / نگاشت خالی) پیاده شدند، نه `const val` هاردکد — چون: (۱) هنوز هیچ تغییر داده‌ای در V1 شِیپ نشده، پس عملاً مقدار فعلی همان ۰/خالی است؛ (۲) این‌طوری در فاز ۲۱ (Hilt) به‌سادگی با `@Provides` جایگزین می‌شوند وقتی نسخه بعدی برنامه واقعاً یک Migration اضافه کرد، بدون دست‌زدن به منطق خودِ UseCase؛ (۳) تست‌پذیری کامل بدون نیاز به تغییر کد اصلی برای شبیه‌سازی سناریوهای چندمرحله‌ای/گم‌شدن Migration.
 - محدوده نوشتن داده دقیقاً طبق سند: فقط Concept و Content؛ این UseCase اصلاً به `LearningStateRepository`/`ReviewHistoryRepository` وابسته نیست (حتی به‌صورت ساختاری امکان دست‌زدن به آن‌ها را ندارد).
 - تست‌ها (`RefreshDataUseCaseTest`، ۸ مورد): بدون Migration ثبت‌شده (NoChange)، Migration یک‌مرحله‌ای Concept، Migration یک‌مرحله‌ای Content، چند‌مرحله‌ای به‌ترتیب صحیح (۱→۲→۳)، Idempotency در اجرای دوم، استقلال کامل نسخه Concept/Content از هم، Migration گم‌شده → Error، و نادیده‌گرفتن Conceptهای Soft-deleted.
@@ -264,8 +264,8 @@
 
 ## جزئیات فاز ۲۱ (تکمیل‌شده)
 
-- `data/di/DatabaseModule.kt` — می‌سازد singleton `FlashLearnRoomDatabase` را (`Room.databaseBuilder` + `ALL_MIGRATIONS` از فاز ۳/۶ + `FlashLearnDatabaseCallback` برای Index شرطی LanguagePair فعال)، و هر ۱۳ DAO را از همان یک نمونه Expose می‌کند.
-- `data/di/RepositoryModule.kt` — هر ۱۴ Interface دامنه (`ConceptRepository` تا `FlashLearnDatabase`) را با `@Binds` به Implementation واقعی‌اش در `:data` وصل می‌کند. هیچ UseCase از فازهای ۲ تا ۲۰ برای این کار تغییر نکرد — همه از قبل فقط به Interfaceهای دامنه وابسته بودند؛ این فاز صرفاً همان Interfaceها را در Runtime قابل‌حل کرد.
+- `data/di/DatabaseModule.kt` — می‌سازد singleton `ClaudemaniRoomDatabase` را (`Room.databaseBuilder` + `ALL_MIGRATIONS` از فاز ۳/۶ + `ClaudemaniDatabaseCallback` برای Index شرطی LanguagePair فعال)، و هر ۱۳ DAO را از همان یک نمونه Expose می‌کند.
+- `data/di/RepositoryModule.kt` — هر ۱۴ Interface دامنه (`ConceptRepository` تا `ClaudemaniDatabase`) را با `@Binds` به Implementation واقعی‌اش در `:data` وصل می‌کند. هیچ UseCase از فازهای ۲ تا ۲۰ برای این کار تغییر نکرد — همه از قبل فقط به Interfaceهای دامنه وابسته بودند؛ این فاز صرفاً همان Interfaceها را در Runtime قابل‌حل کرد.
 - `data/di/RefreshDataModule.kt` — چهار پارامتر Qualified مورد نیاز `RefreshDataUseCase` (نسخه/Migration فعلی Concept و Content) را Provide می‌کند؛ هر دو نسخه ۰ و هر دو Map خالی، چون هنوز هیچ تغییر داده‌ای Ship نشده (طبق تصمیم فاز ۱۹).
 - **تغییر در فایل فاز قبل (توضیح‌داده‌شده قبل از اجرا):** به ۴ پارامتر Constructor مربوط به `RefreshDataUseCase` چهار Qualifier annotation جدید (`@CurrentConceptVersion`, `@CurrentContentVersion`, `@ConceptMigrations`, `@ContentMigrations`) اضافه شد (فایل جدید `usecase/RefreshDataQualifiers.kt`) — چون Hilt نمی‌تواند دو `Int` یا دو `Map<Int,(X)->X>` بدون Qualifier را از هم تشخیص دهد. این Qualifierها فقط از `javax.inject.Qualifier` استفاده می‌کنند (نه Dagger مستقیم)، پس قانون «domain بدون وابستگی Android/Hilt» نقض نشد. تست‌های موجود `RefreshDataUseCaseTest` بدون تغییر پاس می‌مانند چون annotation روی پارامتر تأثیری در فراخوانی مستقیم Kotlin ندارد.
 - **محدودیت شناخته‌شده (قابل‌تأیید فقط با Build واقعی):** درستی نهایی این Wiring (این‌که آیا Dagger واقعاً کل گراف را Compile می‌کند) فقط با اجرای واقعی KSP/Hilt روی یک پروژه‌ی Android کامل قابل تأیید است، نه با تست واحد JVM؛ این دقیقاً همان محدودیتی است که فازهای قبل هم (مثلاً فاز ۴ برای Transaction واقعی) صراحتاً ثبت کرده‌اند. بازبینی دستی کامل انجام شد: هر ۱۴ Interface Bind شده، هر Constructor UseCase در کل `domain/usecase/` فقط به Interfaceهای Bind‌شده یا UseCaseهای دیگر یا پارامترهای Qualified وابسته است.
@@ -276,10 +276,10 @@
 
 - `navigation/Routes.kt` — ۵ مسیر ثابت: `HOME/REVIEW/ADD_WORD/PROGRESS/SETTINGS` (چهارتای اول Primary طبق سند Phase 8؛ AddWord مسیر ثانویه از Home).
 - `presentation/AppUiState.kt` + `presentation/AppViewModel.kt` — دقیقاً طبق سند: فقط `currentRoute` را نگه می‌دارد، هیچ منطق تجاری/UseCase صدا نمی‌زند.
-- `navigation/FlashLearnNavGraph.kt` — `NavHost` واقعی که هر Route را به Composable مربوطه وصل می‌کند و با `LaunchedEffect` به `AppViewModel` اطلاع می‌دهد کدام Route فعال شده.
+- `navigation/ClaudemaniNavGraph.kt` — `NavHost` واقعی که هر Route را به Composable مربوطه وصل می‌کند و با `LaunchedEffect` به `AppViewModel` اطلاع می‌دهد کدام Route فعال شده.
 - `ui/screens/PlaceholderScreens.kt` — پنج صفحه جایگزین موقت (هرکدام فقط یک Text با شماره فازی که در آن جایگزین واقعی می‌شود) — خودِ NavGraph در فازهای ۲۳ تا ۲۸ تغییر نمی‌کند، فقط این Composableها با پیاده‌سازی واقعی عوض می‌شوند.
 - `ui/theme/Color.kt` + `ui/theme/Theme.kt` — پالت رنگی دقیقاً از روی مقادیر Hex سند (Descriptions §۱۲.۱/۱۲.۲: General UI روی Light/Dark جدا، Difficulty/Stage به‌عنوان لایه مکمل).
-- `MainActivity.kt` بازنویسی شد تا واقعاً `FlashLearnTheme { FlashLearnNavGraph() }` را نشان دهد (به‌جای Placeholder فاز ۱ که خودش صراحتاً نوشته بود «Real navigation در فاز ۲۲ وصل می‌شود»).
+- `MainActivity.kt` بازنویسی شد تا واقعاً `ClaudemaniTheme { ClaudemaniNavGraph() }` را نشان دهد (به‌جای Placeholder فاز ۱ که خودش صراحتاً نوشته بود «Real navigation در فاز ۲۲ وصل می‌شود»).
 - **تصمیم آگاهانه (Theme واقعی کاربر به بعد موکول شد):** این فاز فقط از `isSystemInDarkTheme()` پیروی می‌کند؛ اتصال ترجیح صریح کاربر (`GetThemeUseCase` از فاز ۲۰: LIGHT/DARK/SYSTEM) به فاز ۲۸ (صفحه Settings) موکول شد، چون آن نیاز به یک خواندن Async قبل از اولین Frame دارد که با معماری فعلی `MainActivity` (بدون ViewModel سطح Activity برای این کار) هنوز جفت‌وجور نشده.
 - `app/build.gradle.kts`: افزودن `kotlinx-coroutines-test` به `testImplementation` (برای تست `StateFlow`)؛ بقیه‌ی وابستگی‌های لازم (`navigation-compose`, `hilt-navigation-compose`, `material3`, ...) از فاز ۱ از قبل موجود بودند.
 - تست‌ها با **JUnit4** نوشته شدند (نه JUnit5) چون `app/build.gradle.kts` از قبل روی JUnit4 تنظیم شده بود (متفاوت از `domain`/`database` که JUnit5 دارند) — برای هماهنگی با تنظیمات موجود همین ماژول تغییر داده نشد: `RoutesTest` (۳ مورد، دقیقاً همان «Source-level contract test» که سند Phase 8 برای مسیرهای Primary خواسته) و `AppViewModelTest` (۳ مورد).
@@ -308,7 +308,7 @@
 - **تصمیم آگاهانه (UX تناقض):** طبق الگوریتم، `Conflict` باید یا با انتخاب کاربر بین Conceptهای موجود حل شود یا لغو شود؛ ساخت یک UI کامل «انتخاب بین چند Concept» برای این فاز پیچیدگی زیادی اضافه می‌کرد، پس فعلاً `Conflict`ها فقط در خلاصه‌ی Import به‌عنوان «نیازمند بررسی دستی» گزارش می‌شوند و import نمی‌شوند (نه Merge خودکار، نه حذف) — کاربر می‌تواند بعداً آن مورد را جدا و دستی اضافه کند. ساخت UI انتخاب کامل به یک فاز بعدی (Polish) موکول شد.
 - `presentation/addword/AddWordUiState.kt` + `AddWordViewModel.kt` — دو حالت: افزودن دستی (مستقیماً `CreateConceptUseCase`) و Paste Text (`VocabularyParser.parse` → پیش‌نمایش → `ImportParsedEntryUseCase` برای هر Entry). دو تابع خالص و مستقل از Coroutine برای تست‌پذیری: `applyParseResult` و `summarizeImportResults`.
 - `ui/screens/addword/AddWordScreen.kt` — دو تب (افزودن دستی / چسباندن متن)؛ در حالت Paste: فیلد چندخطی → دکمه «تحلیل متن» → خلاصه‌ی تعداد Entry/تکراری/بی‌ترجمه/توضیحی → لیست پیش‌نمایش → دکمه «وارد کردن N کلمه» → کارت خلاصه نتیجه (جدید/ادغام‌شده/از‌قبل‌موجود/تناقض).
-- `navigation/FlashLearnNavGraph.kt` — مسیر `ADD_WORD` به `AddWordScreen` واقعی وصل شد؛ `PlaceholderScreens.kt`: `AddWordScreenPlaceholder` حذف شد.
+- `navigation/ClaudemaniNavGraph.kt` — مسیر `ADD_WORD` به `AddWordScreen` واقعی وصل شد؛ `PlaceholderScreens.kt`: `AddWordScreenPlaceholder` حذف شد.
 - تست‌ها: `ResolveConceptForParsedEntryUseCaseTest` (۵)، `ImportParsedEntryUseCaseTest` (۵)، `AddWordViewModelMappingTest` (۴؛ روی توابع خالص، بدون Coroutine/Fake) — جمعاً ۱۴ تست جدید.
 - **محدودیت شناخته‌شده (مثل فازهای ۲۱ تا ۲۳):** ترکیب واقعی Compose (Tab/LazyColumn) + Hilt + دو UseCase تزریقی فقط با Build/Instrumentation واقعی قابل تأیید کامل است؛ اینجا فقط منطق JVM (UseCaseها و توابع Mapping) تست شد.
 
@@ -321,7 +321,7 @@
 - `presentation/review/ReviewUiState.kt` — چهار حالت: `Loading` / `Empty` (خروجی خالی Queue، طبق الگوریتم «این حالت خطا محسوب نمی‌شود») / `InProgress` (شامل `feedback: AnswerFeedback?` برای غیرفعال‌کردن دکمه‌ها بعد از پاسخ، طبق §۷.۲) / `Finished`.
 - `presentation/review/ReviewViewModel.kt` — `start(reviewType)` یک‌بار Queue می‌سازد (`SelectReviewQueueUseCase` + سقف اختیاری `GetMaxReviewCardsUseCase`)، `StartReviewSessionUseCase` صدا می‌زند، و برای هر کارت: `flip()` → نمایش پشت + یادداشت؛ `answer(isCorrect)` → بلافاصله دکمه‌ها را غیرفعال می‌کند (Feedback ست می‌شود) سپس `SubmitReviewAnswerUseCase` (با `reviewAttemptId` تازه هر بار) را صدا می‌زند؛ روی پاسخ غلط ۲ ثانیه مکث قرمز قبل از رفتن به کارت بعد (Descriptions §12.4)، روی پاسخ صحیح بدون مکث. آخرین کارت → `EndReviewSessionUseCase` + حالت `Finished`.
 - `ui/screens/review/ReviewScreen.kt` — اگر آرگومان Nav (`reviewTypeArg`) null یا نامعتبر بود، پیش‌فرض `ReviewType.DAILY` (تصمیم آگاهانه: انتخابگر واقعی نوع مرور طبق عنوان خودِ فاز ۲۶ به آن فاز موکول شد). فیدبک صحیح/غلط از `AppColors.LightSuccess/DarkSuccess` (سبز، دستی بر اساس `isSystemInDarkTheme()`، چون Material3 ColorScheme اسلات «success» ندارد) و `MaterialTheme.colorScheme.error` (قرمز، از قبل در Theme فاز ۲۲ سیم‌کشی شده) ساخته می‌شود.
-- `navigation/FlashLearnNavGraph.kt` — مسیر `REVIEW` به `ReviewScreen` واقعی وصل شد؛ `onFinished` هر دو حالت Empty/Finished را با `navController.popBackStack()` مستقیماً به Home برمی‌گرداند (که طبق تصمیم فاز ۲۳ خودش با `ON_RESUME` تعداد due را رفرش می‌کند).
+- `navigation/ClaudemaniNavGraph.kt` — مسیر `REVIEW` به `ReviewScreen` واقعی وصل شد؛ `onFinished` هر دو حالت Empty/Finished را با `navController.popBackStack()` مستقیماً به Home برمی‌گرداند (که طبق تصمیم فاز ۲۳ خودش با `ON_RESUME` تعداد due را رفرش می‌کند).
 - `PlaceholderScreens.kt`: `ReviewScreenPlaceholder` حذف شد.
 - تست‌ها: `GetFlashcardContentUseCaseTest` (۶ مورد، دامنه — front/back صحیح، منبع notes فقط از سمت مبدأ، دو حالت `DataIntegrityException`، override زبان سفارشی).
 - **محدودیت شناخته‌شده (مثل فازهای ۲۱ تا ۲۴):** برخلاف `HomeViewModel`/`AddWordViewModel`، منطق `ReviewViewModel` عمداً به یک تابع خالص جدا تجزیه نشد — هسته‌ی آن (پیمایش ترتیبی Queue، مدیریت Session، تأخیر واقعی Coroutine) ذاتاً Stateful/Sequential است، نه یک نگاشت تک‌مرحله‌ای مثل `buildHomeUiState`. بنابراین این فاز فقط در سطح UseCase دامنه تست شد؛ صحت کامل چرخه Flip→Answer→Delay→Next→Finish و رندر واقعی Compose فقط با Instrumentation Test واقعی قابل تأیید نهایی است.
@@ -349,7 +349,7 @@ Quiz mode + انتخابگر واقعی نوع/حالت مرور، روی هما
 - نمایش «تازه‌بازشده» یک‌بار‌مصرف است: `newlyUnlockedTypes` در `ProgressUiState` فقط حاصل همان یک فراخوانی `load()` است؛ با `dismissNewlyUnlocked()` (که فقط همین فیلد را خالی می‌کند، بدون Reload) پاک می‌شود تا یک `load()` دوم (مثلاً On-Resume آینده) چیزی که قبلاً دیده شده را دوباره نشان ندهد.
 - `ui/screens/progress/ProgressScreen.kt` — کارت خلاصه (Streak + نوار پیشرفت٪)، کارت آمار پایه (۸ ردیف: کل فعال/تمرین‌شده/تمرین‌نشده/یادگرفته‌شده/منتظر مرور/صحیح/غلط/دقت٪)، بنر یک‌بارمصرف «دستاورد جدید» (در صورت وجود)، و لیست کامل ۷ دستاورد (باز/قفل، با برچسب فارسیِ ترجمه‌شده از جدول §۱۱.۴ سند — دو ردیف سند که کلمه انگلیسی «Concept»/«Learned» را وسط متن فارسی گذاشته بودند این‌جا کامل ترجمه شدند، نه کپی مستقیم، چون خروجی این تابع مستقیماً روی UI کاربر نهایی نمایش داده می‌شود).
 - برای دکمه بازگشت از `TextButton` استفاده شد (نه آیکون) — مطابق الگوی از‌قبل‌موجود در `AddWordScreen` (فاز ۲۴)، تا وابستگی جدیدی به ماژول آیکون‌های Compose اضافه نشود.
-- `navigation/FlashLearnNavGraph.kt` — مسیر `PROGRESS` به `ProgressScreen` واقعی وصل شد؛ `PlaceholderScreens.kt`: `ProgressScreenPlaceholder` حذف شد (`SettingsScreenPlaceholder` باقی ماند، فاز ۲۸).
+- `navigation/ClaudemaniNavGraph.kt` — مسیر `PROGRESS` به `ProgressScreen` واقعی وصل شد؛ `PlaceholderScreens.kt`: `ProgressScreenPlaceholder` حذف شد (`SettingsScreenPlaceholder` باقی ماند، فاز ۲۸).
 - تست‌ها: `GetAllAchievementsUseCaseTest` (۲ مورد، دامنه) + `ProgressUiStateMappingTest` (۵ مورد، روی تابع خالص `buildProgressUiState` — بدون Coroutine/Fake).
 - **محدودیت شناخته‌شده (مثل فازهای ۲۱ تا ۲۶):** ترکیب واقعی Compose+Hilt (`hiltViewModel()`, بارگذاری واقعی ۵ UseCase تزریقی) فقط با Build/Instrumentation واقعی قابل تأیید نهایی است.
 
@@ -357,8 +357,8 @@ Quiz mode + انتخابگر واقعی نوع/حالت مرور، روی هما
 
 ### اتصال واقعی Theme (رفع شکاف فاز ۲۲)
 فاز ۲۲ گفته بود اتصال ترجیح صریح کاربر به Theme یک ViewModel سطح Activity لازم دارد که هنوز نبود؛ این‌جا ساخته شد:
-- `presentation/ThemeViewModel.kt` (جدید، سطح اپ نه هر صفحه) — تنها منبع حقیقت Theme در کل برنامه. عمداً در `MainActivity` و قبل از ورود به `FlashLearnNavGraph` ساخته می‌شود (نه داخل خود صفحه Settings) چون `FlashLearnTheme` در ریشه درخت Compose قرار دارد و باید به تغییر Theme واکنش نشان دهد؛ یک ViewModel با Scope مسیر Settings (که هربار ورود به آن مسیر از نو ساخته می‌شود) در آن‌جا دیده نمی‌شد.
-- `currentTheme`/`onThemeChange` از `MainActivity` → `FlashLearnNavGraph` → `SettingsScreen` به‌صورت پارامتر ساده (نه UseCase مجزا) پاس داده می‌شوند؛ تا فقط **یک** مقدار در حافظه برای Theme فعلی وجود داشته باشد، نه دو نسخه که ممکن است از هم عقب بیفتند.
+- `presentation/ThemeViewModel.kt` (جدید، سطح اپ نه هر صفحه) — تنها منبع حقیقت Theme در کل برنامه. عمداً در `MainActivity` و قبل از ورود به `ClaudemaniNavGraph` ساخته می‌شود (نه داخل خود صفحه Settings) چون `ClaudemaniTheme` در ریشه درخت Compose قرار دارد و باید به تغییر Theme واکنش نشان دهد؛ یک ViewModel با Scope مسیر Settings (که هربار ورود به آن مسیر از نو ساخته می‌شود) در آن‌جا دیده نمی‌شد.
+- `currentTheme`/`onThemeChange` از `MainActivity` → `ClaudemaniNavGraph` → `SettingsScreen` به‌صورت پارامتر ساده (نه UseCase مجزا) پاس داده می‌شوند؛ تا فقط **یک** مقدار در حافظه برای Theme فعلی وجود داشته باشد، نه دو نسخه که ممکن است از هم عقب بیفتند.
 - `MainActivity` حالا `isSystemInDarkTheme()` را فقط برای حالت `AppTheme.SYSTEM` صدا می‌زند؛ `LIGHT`/`DARK` صریح آن را override می‌کنند.
 
 ### Settings Screen
@@ -392,24 +392,24 @@ Quiz mode + انتخابگر واقعی نوع/حالت مرور، روی هما
 
 ### چرا این تست‌ها لازم بودن
 تا این فاز، **همه** تست‌های UseCase (۲۸ فاز قبلی) روی `Fake*Repository` در حافظه اجرا می‌شدند — سریع، ولی هیچ‌کدام واقعاً SQL/Room را لمس نمی‌کردند. به‌طور مشخص:
-- `FakeFlashLearnDatabase.withTransaction` طبق کامنت خودش «no real rollback semantics» دارد — یعنی Rollback واقعی تراکنش هرگز تست نشده بود، درحالی‌که Rollback اتمیک دقیقاً همان چیزی است که سند بیشترین تأکید را رویش دارد (Descriptions §۲، Algorithms v4.10 تصحیح #۵).
-- ایندکس یکتای شرطی `WHERE isActive = 1` روی `language_pairs` یک SQL خام داخل `FlashLearnDatabaseCallback` است که هیچ‌وقت توسط Room Annotation Processor یا تست‌های Fake اعتبارسنجی نمی‌شد.
+- `FakeClaudemaniDatabase.withTransaction` طبق کامنت خودش «no real rollback semantics» دارد — یعنی Rollback واقعی تراکنش هرگز تست نشده بود، درحالی‌که Rollback اتمیک دقیقاً همان چیزی است که سند بیشترین تأکید را رویش دارد (Descriptions §۲، Algorithms v4.10 تصحیح #۵).
+- ایندکس یکتای شرطی `WHERE isActive = 1` روی `language_pairs` یک SQL خام داخل `ClaudemaniDatabaseCallback` است که هیچ‌وقت توسط Room Annotation Processor یا تست‌های Fake اعتبارسنجی نمی‌شد.
 - منطق UUID→Database-ID در Backup/Restore فقط وقتی معنا دارد که واقعاً **دو دیتابیس فیزیکی جدا** درگیر باشند؛ یک Map مشترک در حافظه (الگوی Fake) هرگز نمی‌توانست باگ این بخش را نشان دهد.
 
 ### فایل‌های جدید
 - `database/src/test/.../LanguagePairActiveIndexTest.kt` — تأیید می‌کند دومین `LanguagePair` با `isActive=true` واقعاً توسط SQLite رد می‌شود (`SQLiteConstraintException`)، و چند ردیف `isActive=false` مشکلی ندارند.
-- `data/src/test/.../integration/RealRoomTestHarness.kt` — هارنس مشترک: یک `FlashLearnRoomDatabase` واقعی In-Memory + نمونه واقعی همه ۱۳ Repository Impl (بدون Hilt — سازنده‌ها همگی فقط یک DAO می‌گیرند، دستی Wire شدن ساده‌تر از راه‌انداختن Hilt Test Rule بود).
+- `data/src/test/.../integration/RealRoomTestHarness.kt` — هارنس مشترک: یک `ClaudemaniRoomDatabase` واقعی In-Memory + نمونه واقعی همه ۱۳ Repository Impl (بدون Hilt — سازنده‌ها همگی فقط یک DAO می‌گیرند، دستی Wire شدن ساده‌تر از راه‌انداختن Hilt Test Rule بود).
 - `CreateConceptIntegrationTest.kt` — اتمیک‌بودن واقعی Concept+۲Content+LearningState+DifficultyState، و صحت واقعی `canonicalKey` روی ردیف واقعاً نوشته‌شده در دیتابیس.
 - `SubmitReviewAnswerIntegrationTest.kt` — مسیر موفق (DAILY→WEEKLY + یک ردیف ReviewHistory واقعی)، Duplicate attempt (رد می‌شود و **هیچ‌چیز تغییر نمی‌کند** — تأیید‌شده با خواندن دوباره از دیتابیس واقعی)، DATA_INTEGRITY_ERROR روی Concept ناموجود، Weekly-Wrong→MEDIUM اجباری، و یک تست مجزا که مستقیماً `androidx.room.withTransaction` واقعی را صدا می‌زند تا رفتار Rollback واقعی (نه از طریق UseCase، چون مسیرهای آن قبل از نوشتن دوم همیشه Guard می‌شوند) اثبات شود.
 - `BackupRestoreIntegrationTest.kt` — بین **دو** نمونه واقعی Room جدا (source/target): Backup کامل از یکی، Restore در دیگری (خالی)، تأیید تطابق کامل شناسه‌ها/وضعیت؛ و یک تست Idempotency (Restore دوباره‌ی همان Backup باید Merge کند نه Duplicate).
 
 ### باگ‌های واقعی پیدا و رفع‌شده (نه فرضی)
 دو کامنت مستند که با کد واقعی تناقض داشتند، هنگام نوشتن تست‌های بالا کشف و اصلاح شدند (نه تغییر رفتار، فقط تصحیح مستندات گمراه‌کننده):
-1. `LanguagePairEntity.kt` و `LanguageDaos.kt` ادعا می‌کردند قانون «حداکثر یک LanguagePair فعال» توسط «LanguagePairUseCases» در لایه دامنه enforce می‌شود — چنین فایلی اصلاً در پروژه وجود ندارد (`grep` تأیید کرد). تنها enforcement واقعی همان ایندکس یکتای شرطی در `FlashLearnDatabaseCallback` است؛ کامنت‌ها اصلاح شدند.
+1. `LanguagePairEntity.kt` و `LanguageDaos.kt` ادعا می‌کردند قانون «حداکثر یک LanguagePair فعال» توسط «LanguagePairUseCases» در لایه دامنه enforce می‌شود — چنین فایلی اصلاً در پروژه وجود ندارد (`grep` تأیید کرد). تنها enforcement واقعی همان ایندکس یکتای شرطی در `ClaudemaniDatabaseCallback` است؛ کامنت‌ها اصلاح شدند.
 2. `ExportData.kt` هنوز می‌گفت «Phase 17 — not yet implemented» درحالی‌که Phase 17 از فاز ۱۷ (دو روز قبل) Done است.
 
 ### محدودیت‌های شناخته‌شده باقی‌مانده
-- **Migration واقعی هنوز تست نشده** — چون `FLASHLEARN_SCHEMA_VERSION` هنوز ۱ است و `ALL_MIGRATIONS` خالی (هیچ Migration واقعی برای تست وجود ندارد). اولین بار که یک Migration واقعی اضافه شود، باید یک `MigrationTest` (با `MigrationTestHelper` رسمی Room) هم اضافه شود — این‌جا فقط زیرساخت (`room-testing`) آماده است.
+- **Migration واقعی هنوز تست نشده** — چون `CLAUDEMANI_SCHEMA_VERSION` هنوز ۱ است و `ALL_MIGRATIONS` خالی (هیچ Migration واقعی برای تست وجود ندارد). اولین بار که یک Migration واقعی اضافه شود، باید یک `MigrationTest` (با `MigrationTestHelper` رسمی Room) هم اضافه شود — این‌جا فقط زیرساخت (`room-testing`) آماده است.
 - تست‌های UI (Compose+Hilt واقعی) هنوز خارج از این فاز‌اند؛ همان محدودیت تکرارشونده فازهای ۲۳ تا ۲۸.
 - «رفع خطا» این فاز محدود بود به دو کامنت مستندسازی نادرست که در حین ساخت تست‌های واقعی کشف شد؛ هیچ باگ رفتاری (منطق غلط در کد اجراشونده) پیدا نشد — که خودش یک سیگنال مثبت درباره‌ی دقت فازهای قبلی است، نه نبود بررسی.
 
@@ -430,7 +430,7 @@ Quiz mode + انتخابگر واقعی نوع/حالت مرور، روی هما
 
 **راه‌حل انتخاب‌شده و چرا:** یک UseCase جدید idempotent (`EnsureDefaultLanguagePairUseCase`) که هر بار قبل از insert، اول `getActive()` را چک می‌کند. سه گزینه دیگر رد شدند:
 - **Room `onCreate` callback** (همان محلی که ایندکس یکتای LanguagePair ساخته می‌شود): رد شد چون `onCreate` برای *هر* دیتابیس In-Memory تازه هم اجرا می‌شود — یعنی تست‌های فاز ۲۹ (`LanguagePairActiveIndexTest`) که خودشان دستی یک `isActive=true` insert می‌کنند، با یک ردیف seed‌شده‌ی از‌قبل‌موجود به تناقض ایندکس یکتا می‌خوردند و می‌شکستند.
-- **گذاشتن فراخوانی داخل `FlashLearnApplication.onCreate()`**: رد شد چون کامنت خود آن کلاس صریحاً می‌گوید «No other logic belongs here — all business logic lives in domain/data».
+- **گذاشتن فراخوانی داخل `ClaudemaniApplication.onCreate()`**: رد شد چون کامنت خود آن کلاس صریحاً می‌گوید «No other logic belongs here — all business logic lives in domain/data».
 - **گذاشتن فراخوانی داخل `AppViewModel`**: رد شد چون KDoc خود همان کلاس از فاز ۲۲ صراحتاً می‌گوید «handles route selection only... never calls into domain at all» — این یک مرز معماری آگاهانه‌ی قبلی بود، نه یک محدودیت اتفاقی.
 - **راه‌حل نهایی:** یک `StartupViewModel` جدید و مستقل، دقیقاً با همون الگوی `ThemeViewModel` (Scope سطح Activity، ساخته‌شده در `MainActivity` قبل از ورود به NavGraph) — چون این هم یک «باید دقیقاً یک‌بار برای کل پردازش اپ اجرا شود» است، نه منطق تعیین Route.
 
@@ -478,7 +478,7 @@ KSP یک Extension سطح-بالای Gradle است، نه عضوی از `Library
 `.gitignore` در پروژه وجود ندارند — این ادعا درباره‌ی **کد پروژه غلط**
 بود (هر دو فایل همیشه در `docs/PROGRESS_TRACKER.md`/کد موجود بودند)، اما
 ریشه‌ی واقعی گزارش درست بود: من در دستور ساخت هر zip از
-`zip -r ... FlashLearn -x "*.git*"` استفاده می‌کردم تا پوشه `.git` را
+`zip -r ... Claudemani -x "*.git*"` استفاده می‌کردم تا پوشه `.git` را
 حذف کنم (که این پروژه اصلاً هیچ‌وقت نداشت — هرگز `git init` نشده). پترن
 `*.git*` علاوه بر `.git`، با `.github` هم مچ می‌شود (چون `.github` با
 `.git` شروع می‌شود)، پس **هر زیپی که از فاز ۲۷ تا ۳۱ تحویل داده شد،
@@ -719,7 +719,7 @@ VocabularyCsvUseCasesTest > importing the same csv twice reports AlreadyExists t
 
 ۲. **پیشرفت ۳۵٪ بدون هیچ مرور** — `CalculateProgressPercentage` طبق شبه‌کد Algorithms §۱۱.۲ برای Stage=DAILY همیشه ۳۵ می‌داد، ولی هر کلمه‌ی تازه DAILY است. جدول خودِ Descriptions می‌گوید «تمرین‌نشده = ۰٪، اولین تمرین = ۱۵٪». **رفع:** DAILY → ۱۵ اگر ReviewHistory دارد، وگرنه ۰. (**تناقض مستند:** بند §۱۱.۲ در Algorithms باید اصلاح شود.)
 
-۳. **Backup نسخه‌های قبلی Restore نمی‌شد** — دو علت پشت‌سرهم: (الف) `lastReviewedAt` در فایل قدیمی نبود ولی DTO آن را الزامی می‌دانست → «فایل پشتیبان معتبر نیست»؛ (ب) فایل `schemaVersion=2` داشت و اپ نسخه ۱ بود → `validateBackup` رد می‌کرد. **رفع:** فیلدهای nullable در DTOها مقدار پیش‌فرض null گرفتند (و `hasReachedVeryHard=false`)؛ `FLASHLEARN_SCHEMA_VERSION` به ۲ رفت (Migration بالا) پس بازه‌ی پشتیبانی ۱..۲ می‌شود.
+۳. **Backup نسخه‌های قبلی Restore نمی‌شد** — دو علت پشت‌سرهم: (الف) `lastReviewedAt` در فایل قدیمی نبود ولی DTO آن را الزامی می‌دانست → «فایل پشتیبان معتبر نیست»؛ (ب) فایل `schemaVersion=2` داشت و اپ نسخه ۱ بود → `validateBackup` رد می‌کرد. **رفع:** فیلدهای nullable در DTOها مقدار پیش‌فرض null گرفتند (و `hasReachedVeryHard=false`)؛ `CLAUDEMANI_SCHEMA_VERSION` به ۲ رفت (Migration بالا) پس بازه‌ی پشتیبانی ۱..۲ می‌شود.
 
 **محدودیت صادقانه:** Gradle اینجا اجرا نشده؛ تأیید نهایی با CI.
 
