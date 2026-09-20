@@ -127,7 +127,7 @@ class BackupRestoreIntegrationTest {
         submitAnswerInSource(
             SubmitReviewAnswerRequest(
                 conceptId = conceptId, sessionId = sessionId, reviewAttemptId = UUID.randomUUID(),
-                reviewType = ReviewType.DAILY, isCorrect = true, reviewedAt = Instant.parse("2026-09-18T09:00:00Z")
+                reviewType = ReviewType.DAILY, isCorrect = true, reviewedAt = Instant.now().plusSeconds(60)
             )
         )
 
