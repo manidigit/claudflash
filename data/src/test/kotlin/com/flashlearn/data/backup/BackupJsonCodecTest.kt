@@ -72,6 +72,29 @@ class BackupJsonCodecTest {
     }
 
     @Test
+    fun `an older backup without lastReviewedAt and with schemaVersion 2 still decodes`() {
+        val legacy = """
+            {"schemaVersion":2,"exportedAt":"2026-09-18T21:05:50.152599Z","backupType":"FULL",
+             "concepts":[{"id":"9fc5aff4-61e1-45d9-885c-f245f9a18e5c","entryType":"WORD","categoryId":null,
+               "favorite":false,"active":true,"createdAt":"2026-09-18T21:05:41.609Z","updatedAt":"2026-09-18T21:05:41.609Z"}],
+             "contents":[{"id":"00058302-12fb-4930-a338-feac9e8b8dc0","conceptId":"9fc5aff4-61e1-45d9-885c-f245f9a18e5c",
+               "languageCode":"es","text":"hola","canonicalKey":"hola","translationIndex":0}],
+             "learningStates":[{"id":"e0d55a53-cf30-4cc8-803d-ebe242680871","conceptId":"9fc5aff4-61e1-45d9-885c-f245f9a18e5c",
+               "stage":"DAILY","nextReviewAt":"2026-09-18T21:05:41.635Z","monthlyWrongCount":0,"hasPathFailure":false,
+               "totalCorrect":0,"totalWrong":0}],
+             "difficultyStates":[{"id":"415363f9-319c-42f2-8603-94e51bb57971","conceptId":"9fc5aff4-61e1-45d9-885c-f245f9a18e5c",
+               "current":"EASY","consecutiveCorrect":0,"consecutiveWrong":0,"hasReachedVeryHard":false}],
+             "parserMetadata":[],"relations":[],"variants":[],"reviewQueue":[]}
+        """.trimIndent()
+
+        val decoded = BackupJsonCodec.decode(legacy)
+
+        assertEquals(2, decoded.schemaVersion)
+        assertEquals(1, decoded.learningStates.size)
+        assertEquals(null, decoded.learningStates[0].lastReviewedAt)
+    }
+
+    @Test
     fun `garbage text is reported as an invalid backup file, not a raw parser crash`() {
         assertThrows(BackupFileFormatException::class.java) {
             BackupJsonCodec.decode("this is not json at all")

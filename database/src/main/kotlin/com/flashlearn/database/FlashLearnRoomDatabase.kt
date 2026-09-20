@@ -31,16 +31,16 @@ import com.flashlearn.database.entity.SettingsEntity
 import com.flashlearn.database.entity.TagEntity
 
 /**
- * Current Room schema version. This is version 1 — the first release of
- * this from-scratch rewrite, so [com.flashlearn.database.migration.ALL_MIGRATIONS]
- * is empty. Bump this and add a Migration whenever the table structure
+ * Current Room schema version. Version 1 was the first release of this
+ * from-scratch rewrite; version 2 (v1.4.5) only repairs data — no table changed
+ * (see MIGRATION_1_2). Bump this and add a Migration whenever the table structure
  * changes (see the KDoc on ALL_MIGRATIONS for the exact procedure).
  *
  * This is entirely independent from Concept/Content.dataVersion, which is
  * owned by RefreshDataUseCase (Phase 19) and migrates row *content*, not
  * table *structure*.
  */
-const val FLASHLEARN_SCHEMA_VERSION = 1
+const val FLASHLEARN_SCHEMA_VERSION = 2
 
 /**
  * The single Room database for the app (Descriptions §16.1: one Room

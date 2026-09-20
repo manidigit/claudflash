@@ -107,10 +107,19 @@ class ProgressUseCasesTest {
         fx.addConcept(Stage.LEARNED) // 100
         fx.addConcept(Stage.MONTHLY) // 80
         fx.addConcept(Stage.WEEKLY) // 60
-        fx.addConcept(Stage.DAILY) // 35
+        fx.addConcept(Stage.DAILY, practiced = true) // 15
 
         val percentage = fx.getPercentage()
-        assertEquals((100 + 80 + 60 + 35) / 4.0, percentage)
+        assertEquals((100 + 80 + 60 + 15) / 4.0, percentage)
+    }
+
+    @Test
+    fun `fresh DAILY words that were never reviewed score 0 percent`() = runTest {
+        val fx = Fixture()
+        fx.addConcept(Stage.DAILY)
+        fx.addConcept(Stage.DAILY)
+
+        assertEquals(0.0, fx.getPercentage())
     }
 
     @Test

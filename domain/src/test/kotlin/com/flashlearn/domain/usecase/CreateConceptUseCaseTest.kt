@@ -59,7 +59,9 @@ class CreateConceptUseCaseTest {
 
         val learningState = learningStates.get(conceptId)
         assertEquals(Stage.DAILY, learningState?.stage)
-        assertEquals(null, learningState?.nextReviewAt)
+        // A new word must be due immediately, otherwise no review queue ever contains it.
+        val dueAt = learningState?.nextReviewAt
+        assertTrue(dueAt != null && !dueAt.isAfter(java.time.Instant.now()))
 
         val difficultyState = difficultyStates.get(conceptId)
         assertEquals(VocabularyDifficulty.EASY, difficultyState?.current)

@@ -54,8 +54,8 @@ class GetProgressSummaryUseCase @Inject constructor(
 
 /**
  * CalculateProgressPercentage (Algorithms v4.20 §11.2). Stage-based score
- * per active Concept (LEARNED=100, MONTHLY=80, WEEKLY=60, DAILY=35;
- * practiced-but-no-LearningState=15; otherwise 0), averaged across all
+ * per active Concept (LEARNED=100, MONTHLY=80, WEEKLY=60; DAILY or
+ * no-LearningState = 15 if the word has any ReviewHistory, else 0), averaged across all
  * active Concepts — replaces the plain "learned ÷ total" formula so
  * progress is visible before a word ever reaches LEARNED. Read-only.
  *
@@ -85,8 +85,10 @@ class CalculateProgressPercentageUseCase @Inject constructor(
                 Stage.LEARNED -> 100
                 Stage.MONTHLY -> 80
                 Stage.WEEKLY -> 60
-                Stage.DAILY -> 35
-                null -> if (concept.id in practicedConceptIds) 15 else 0
+                // DAILY is the *starting* stage of every new word, so it must not score
+                // by stage alone (that made a fresh, never-reviewed library show 35%).
+                // Descriptions table: never practiced = 0%, first practice = 15%.
+                Stage.DAILY, null -> if (concept.id in practicedConceptIds) 15 else 0
             }
         }
 

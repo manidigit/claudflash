@@ -101,13 +101,16 @@ class CreateConceptUseCase @Inject constructor(
                 )
             )
 
-            // 3. LearningState — initial DAILY
+            // 3. LearningState — initial DAILY, due right now
             learningStateRepository.upsert(
                 LearningState(
                     id = UUID.randomUUID(),
                     conceptId = conceptId,
                     stage = Stage.DAILY,
-                    nextReviewAt = null,
+                    // A brand-new word must be due immediately: the Scheduler's due query
+                    // requires nextReviewAt IS NOT NULL for DAILY/WEEKLY/MONTHLY, so a null
+                    // here would hide the word from every review queue forever (v1.4.5 fix).
+                    nextReviewAt = now,
                     monthlyWrongCount = 0,
                     hasPathFailure = false,
                     totalCorrect = 0,

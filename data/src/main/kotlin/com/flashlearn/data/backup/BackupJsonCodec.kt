@@ -106,7 +106,7 @@ private data class TagDto(val id: String, val name: String)
 
 @Serializable
 private data class ConceptDto(
-    val id: String, val entryType: String, val categoryId: String?, val favorite: Boolean,
+    val id: String, val entryType: String, val categoryId: String? = null, val favorite: Boolean,
     val active: Boolean, val createdAt: String, val updatedAt: String, val dataVersion: Int = 0
 )
 
@@ -121,7 +121,7 @@ private data class ContentDto(
 private data class ConceptTagDto(val conceptId: String, val tagId: String)
 
 @Serializable
-private data class ReviewSessionDto(val id: String, val startedAt: String, val endedAt: String?, val reviewType: String)
+private data class ReviewSessionDto(val id: String, val startedAt: String, val endedAt: String? = null, val reviewType: String)
 
 @Serializable
 private data class ReviewHistoryDto(
@@ -131,22 +131,22 @@ private data class ReviewHistoryDto(
 
 @Serializable
 private data class LearningStateDto(
-    val id: String, val conceptId: String, val stage: String, val nextReviewAt: String?,
+    val id: String, val conceptId: String, val stage: String, val nextReviewAt: String? = null,
     val monthlyWrongCount: Int, val hasPathFailure: Boolean, val totalCorrect: Int,
-    val totalWrong: Int, val lastReviewedAt: String?
+    val totalWrong: Int, val lastReviewedAt: String? = null
 )
 
 @Serializable
 private data class DifficultyStateDto(
     val id: String, val conceptId: String, val current: String,
-    val consecutiveCorrect: Int, val consecutiveWrong: Int, val hasReachedVeryHard: Boolean
+    val consecutiveCorrect: Int, val consecutiveWrong: Int, val hasReachedVeryHard: Boolean = false
 )
 
 @Serializable
 private data class AppSettingDto(val key: String, val value: String, val updatedAt: String)
 
 @Serializable
-private data class AchievementDto(val type: String, val isUnlocked: Boolean, val unlockedAt: String?)
+private data class AchievementDto(val type: String, val isUnlocked: Boolean, val unlockedAt: String? = null)
 
 // ------------------------------------------------------------------
 // domain -> dto

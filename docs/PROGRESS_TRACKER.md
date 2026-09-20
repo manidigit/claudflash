@@ -713,6 +713,16 @@ VocabularyCsvUseCasesTest > importing the same csv twice reports AlreadyExists t
 
 **نکته درباره‌ی بقیه‌ی `gradle test`:** چون `:domain:test` شکست خورد، Gradle اجرای `:data:test` و `:database:test` (Robolectric/Room واقعی؛ شامل `LanguageSeedBackupRestoreIntegrationTest`) را پیش از پایان قطع کرد و نتیجه‌ی آن‌ها در این لاگ نیست. تأیید آن‌ها به اجرای بعدی CI موکول شد.
 
+## فاز ۴۳ (v1.4.5): سه باگ گزارش‌شده توسط کاربر روی گوشی
+
+۱. **«چیزی برای مرور نیست»** — `CreateConceptUseCase` کلمه‌ی تازه را با `nextReviewAt = null` می‌ساخت، ولی کوئری‌های due (`getDueByStage`, `getAllDueNonLearned`) صراحتاً `nextReviewAt IS NOT NULL` می‌خواهند؛ پس هیچ کلمه‌ی افزوده‌شده‌ای هرگز در صف نمی‌آمد (تست‌ها همیشه `nextReviewAt` گذشته می‌گذاشتند و این حالت را نمی‌دیدند). **رفع:** `nextReviewAt = now` هنگام ساخت؛ Migration 1→2 (فقط داده، بدون تغییر ساختار) کلمات موجود را due می‌کند؛ Restore هم ردیف‌های DAILY/WEEKLY/MONTHLY با `nextReviewAt=null` را due می‌کند تا Backupهای v1.4.0–1.4.4 باگ را برنگردانند.
+
+۲. **پیشرفت ۳۵٪ بدون هیچ مرور** — `CalculateProgressPercentage` طبق شبه‌کد Algorithms §۱۱.۲ برای Stage=DAILY همیشه ۳۵ می‌داد، ولی هر کلمه‌ی تازه DAILY است. جدول خودِ Descriptions می‌گوید «تمرین‌نشده = ۰٪، اولین تمرین = ۱۵٪». **رفع:** DAILY → ۱۵ اگر ReviewHistory دارد، وگرنه ۰. (**تناقض مستند:** بند §۱۱.۲ در Algorithms باید اصلاح شود.)
+
+۳. **Backup نسخه‌های قبلی Restore نمی‌شد** — دو علت پشت‌سرهم: (الف) `lastReviewedAt` در فایل قدیمی نبود ولی DTO آن را الزامی می‌دانست → «فایل پشتیبان معتبر نیست»؛ (ب) فایل `schemaVersion=2` داشت و اپ نسخه ۱ بود → `validateBackup` رد می‌کرد. **رفع:** فیلدهای nullable در DTOها مقدار پیش‌فرض null گرفتند (و `hasReachedVeryHard=false`)؛ `FLASHLEARN_SCHEMA_VERSION` به ۲ رفت (Migration بالا) پس بازه‌ی پشتیبانی ۱..۲ می‌شود.
+
+**محدودیت صادقانه:** Gradle اینجا اجرا نشده؛ تأیید نهایی با CI.
+
 ## نکات فنی مهم برای مراحل بعد
 
 - الگوریتم‌های Pure (`Learning Transition`, `Difficulty Calculation`) باید در `domain` بدون وابستگی به Room/Android نوشته شوند. `GenerateQuizQuestion` (فاز ۱۴) برخلاف این دو، برای ساخت Pool Distractor به Repositoryها نیاز دارد (مثل `SelectReviewQueue`) — پس به‌صورت UseCase در `domain` نوشته شد، نه تابع Pure مستقل؛ اما همچنان کاملاً Read-only است و هیچ Stateای تغییر نمی‌دهد.

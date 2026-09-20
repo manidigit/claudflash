@@ -4,6 +4,7 @@ import com.flashlearn.domain.algorithm.BackupValidationResult
 import com.flashlearn.domain.algorithm.validateBackup
 import com.flashlearn.domain.model.BackupType
 import com.flashlearn.domain.model.ExportData
+import com.flashlearn.domain.model.Stage
 import com.flashlearn.domain.model.computeCanonicalKey
 import com.flashlearn.domain.repository.AchievementRepository
 import com.flashlearn.domain.repository.CategoryRepository
@@ -92,13 +93,13 @@ class RestoreBackupUseCase @Inject constructor(
 
         // مرحله ۳ تا ۵ — اجرای کل Restore داخل یک Transaction واحد
         return try {
-            database.withTransaction { runRestore(data) }
+            database.withTransaction { runRestore(data, now) }
         } catch (e: Exception) {
             RestoreResult.Error(e.message ?: "Restore failed")
         }
     }
 
-    private suspend fun runRestore(data: ExportData): RestoreResult.Success {
+    private suspend fun runRestore(data: ExportData, now: Instant): RestoreResult.Success {
         var newCount = 0
         var mergedCount = 0
 
@@ -246,8 +247,15 @@ class RestoreBackupUseCase @Inject constructor(
         // ۳.۹/۳.۱۰ LearningStates / DifficultyStates — قانون ۵ (Progress Backup): اگر Concept
         // موردنیاز در دیتابیس مقصد وجود نداشته باشد (یک PROGRESS backup می‌تواند به Conceptهای
         // خارجی ارجاع بدهد)، رکورد وابسته skip می‌شود، نه Error.
-        data.learningStates.forEach { state ->
-            if (conceptRepository.findAnyById(state.conceptId) == null) return@forEach
+        data.learningStates.forEach { rawState ->
+            if (conceptRepository.findAnyById(rawState.conceptId) == null) return@forEach
+            // Backups made by v1.4.0–1.4.4 contain DAILY words with nextReviewAt = null (never
+            // due). Repair on the way in so a restore can't resurrect that bug.
+            val state = if (rawState.stage != Stage.LEARNED && rawState.nextReviewAt == null) {
+                rawState.copy(nextReviewAt = now)
+            } else {
+                rawState
+            }
             val existing = learningStateRepository.get(state.conceptId)
             if (existing != null) {
                 learningStateRepository.upsert(state.copy(id = existing.id))

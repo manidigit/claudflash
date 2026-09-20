@@ -8,16 +8,16 @@ import org.junit.Test
 class FlashLearnRoomDatabaseTest {
 
     @Test
-    fun `schema version is 1 for this initial release`() {
-        assertEquals(1, FLASHLEARN_SCHEMA_VERSION)
+    fun `schema version is 2`() {
+        assertEquals(2, FLASHLEARN_SCHEMA_VERSION)
     }
 
     @Test
-    fun `no migrations exist yet - version 1 is the first release`() {
-        // If this ever fails because FLASHLEARN_SCHEMA_VERSION was bumped,
-        // it's a reminder to also add the corresponding Migration and
-        // update this test rather than silently leaving it empty.
-        assertTrue(ALL_MIGRATIONS.isEmpty())
+    fun `migration chain reaches the current schema version`() {
+        // If FLASHLEARN_SCHEMA_VERSION is bumped again, add the Migration and update this test.
+        assertEquals(1, ALL_MIGRATIONS.size)
+        assertEquals(1, ALL_MIGRATIONS[0].startVersion)
+        assertEquals(FLASHLEARN_SCHEMA_VERSION, ALL_MIGRATIONS[0].endVersion)
     }
 
     @Test

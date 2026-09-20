@@ -226,6 +226,22 @@ class RestoreBackupUseCaseTest {
     }
 
     @Test
+    fun `a restored non-LEARNED learning state with null nextReviewAt is made due now`() = runTest {
+        val fx = Fixture()
+        val c = concept()
+        fx.concepts.insert(c)
+        val data = ExportData(
+            schemaVersion = 1, exportedAt = now, backupType = BackupType.PROGRESS,
+            learningStates = listOf(learningState(c.id)), // DAILY, nextReviewAt = null
+            difficultyStates = listOf(difficultyState(c.id))
+        )
+
+        fx.restoreBackup(data, 1, now, alwaysPersist, alwaysConfirm) as RestoreResult.Success
+
+        assertEquals(now, fx.learningStates.get(c.id)?.nextReviewAt)
+    }
+
+    @Test
     fun `PROGRESS rows are restored once their concept already exists in the target`() = runTest {
         val fx = Fixture()
         val c = concept()
