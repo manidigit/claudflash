@@ -114,9 +114,13 @@ class GenerateQuizQuestionUseCase @Inject constructor(
                 if (normalize(content.text) == correctNormalized) continue
                 // getById only returns active (non soft-deleted) Concepts — an inactive
                 // Concept's translations are silently excluded from the Distractor pool.
-                val candidateConcept = conceptCache.getOrPut(content.conceptId) {
-                    conceptRepository.getById(content.conceptId) ?: continue
-                }
+                // Written to avoid `continue` inside getOrPut's lambda (that pattern needs
+                // Kotlin's "non-local break/continue in inline lambdas" feature, which is
+                // still experimental in 1.9.20 and fails the build unless opted into
+                // explicitly — found via a real CI compile failure).
+                val candidateConcept = conceptCache[content.conceptId]
+                    ?: conceptRepository.getById(content.conceptId)?.also { conceptCache[content.conceptId] = it }
+                    ?: continue
                 if (difficultyFilter != null) {
                     val candidateDifficulty = difficultyStateRepository.get(candidateConcept.id)
                         ?: continue
