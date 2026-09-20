@@ -4,12 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.flashlearn.domain.model.Concept
 import com.flashlearn.domain.model.LanguagePair
+import com.flashlearn.domain.model.QuizDifficulty
 import com.flashlearn.domain.model.ReviewType
 import com.flashlearn.domain.usecase.CheckAndUnlockAchievementsUseCase
 import com.flashlearn.domain.usecase.EndReviewSessionUseCase
 import com.flashlearn.domain.usecase.GenerateQuizQuestionUseCase
 import com.flashlearn.domain.usecase.GetActiveLanguagePairUseCase
 import com.flashlearn.domain.usecase.GetDifficultyStateUseCase
+import com.flashlearn.domain.usecase.GetQuizDifficultyUseCase
 import com.flashlearn.domain.usecase.GetFlashcardContentUseCase
 import com.flashlearn.domain.usecase.GetMaxReviewCardsUseCase
 import com.flashlearn.domain.usecase.QuizGenerationResult
@@ -70,6 +72,7 @@ class ReviewViewModel @Inject constructor(
     private val getDifficultyState: GetDifficultyStateUseCase,
     private val generateQuizQuestion: GenerateQuizQuestionUseCase,
     private val getActiveLanguagePair: GetActiveLanguagePairUseCase,
+    private val getQuizDifficulty: GetQuizDifficultyUseCase,
     private val checkAndUnlockAchievements: CheckAndUnlockAchievementsUseCase
 ) : ViewModel() {
 
@@ -82,6 +85,7 @@ class ReviewViewModel @Inject constructor(
     private var queue: List<Concept> = emptyList()
     private var correctCount = 0
     private lateinit var activeLanguagePair: LanguagePair
+    private var quizDifficulty: QuizDifficulty = QuizDifficulty.MEDIUM
 
     /** Idempotent — shows the options picker pre-filled with [initialReviewType], defaulting mode to Flashcard. */
     fun initialize(initialReviewType: ReviewType) {
@@ -109,6 +113,7 @@ class ReviewViewModel @Inject constructor(
             _uiState.value = ReviewUiState.Loading
             val now = Instant.now()
             activeLanguagePair = getActiveLanguagePair()
+            quizDifficulty = getQuizDifficulty()
             // Descriptions §6: this caps Session *size* only, never Eligibility —
             // the due-set itself already came back from SelectReviewQueueUseCase.
             val maxCards = getMaxReviewCards()
@@ -131,7 +136,7 @@ class ReviewViewModel @Inject constructor(
 
         val presentation: CardPresentation = if (mode == ReviewMode.QUIZ) {
             val difficultyState = getDifficultyState(concept.id)
-            when (val quiz = generateQuizQuestion(concept, activeLanguagePair, difficultyState)) {
+            when (val quiz = generateQuizQuestion(concept, activeLanguagePair, difficultyState, quizDifficulty)) {
                 is QuizGenerationResult.QuizQuestion -> CardPresentation.Quiz(
                     options = quiz.options,
                     correctAnswerText = quiz.correctAnswerText

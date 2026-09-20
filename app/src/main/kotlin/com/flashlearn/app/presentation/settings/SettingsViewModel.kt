@@ -2,9 +2,14 @@ package com.flashlearn.app.presentation.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.flashlearn.domain.model.QuizDifficulty
+import com.flashlearn.domain.usecase.GetBackupEncryptionEnabledUseCase
 import com.flashlearn.domain.usecase.GetMaxReviewCardsUseCase
+import com.flashlearn.domain.usecase.GetQuizDifficultyUseCase
 import com.flashlearn.domain.usecase.GetThresholdDifficultyUseCase
+import com.flashlearn.domain.usecase.SetBackupEncryptionEnabledUseCase
 import com.flashlearn.domain.usecase.SetMaxReviewCardsUseCase
+import com.flashlearn.domain.usecase.SetQuizDifficultyUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Instant
 import javax.inject.Inject
@@ -14,19 +19,24 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Owns Settings screen state for Max Review Cards + the read-only
- * threshold display — all through UseCases, same rule as every other
- * screen in this app. Theme is deliberately NOT owned here: it is
- * app-wide state that must be visible above the NavGraph (to
- * `FlashLearnTheme`), so it lives in the Activity-scoped `ThemeViewModel`
- * instead and is passed into `SettingsScreen` as plain parameters —
- * see that class's KDoc for the full reasoning.
+ * Owns Settings screen state for Max Review Cards, Quiz Difficulty,
+ * Backup encryption toggle, and the read-only threshold display — all
+ * through UseCases, same rule as every other screen in this app. Theme
+ * is deliberately NOT owned here: it is app-wide state that must be
+ * visible above the NavGraph (to `FlashLearnTheme`), so it lives in the
+ * Activity-scoped `ThemeViewModel` instead and is passed into
+ * `SettingsScreen` as plain parameters — see that class's KDoc for the
+ * full reasoning.
  */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val getThresholdDifficulty: GetThresholdDifficultyUseCase,
     private val getMaxReviewCards: GetMaxReviewCardsUseCase,
-    private val setMaxReviewCards: SetMaxReviewCardsUseCase
+    private val setMaxReviewCards: SetMaxReviewCardsUseCase,
+    private val getQuizDifficulty: GetQuizDifficultyUseCase,
+    private val setQuizDifficulty: SetQuizDifficultyUseCase,
+    private val getBackupEncryptionEnabled: GetBackupEncryptionEnabledUseCase,
+    private val setBackupEncryptionEnabled: SetBackupEncryptionEnabledUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -44,7 +54,9 @@ class SettingsViewModel @Inject constructor(
                 isLoading = false,
                 thresholdDifficulty = threshold,
                 maxReviewCardsText = maxCards?.toString() ?: "",
-                maxReviewCardsError = null
+                maxReviewCardsError = null,
+                quizDifficulty = getQuizDifficulty(),
+                backupEncryptionEnabled = getBackupEncryptionEnabled()
             )
         }
     }
@@ -66,6 +78,16 @@ class SettingsViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    fun onQuizDifficultySelected(value: QuizDifficulty) {
+        _uiState.value = _uiState.value.copy(quizDifficulty = value)
+        viewModelScope.launch { setQuizDifficulty(value, Instant.now()) }
+    }
+
+    fun onBackupEncryptionToggled(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(backupEncryptionEnabled = enabled)
+        viewModelScope.launch { setBackupEncryptionEnabled(enabled, Instant.now()) }
     }
 }
 

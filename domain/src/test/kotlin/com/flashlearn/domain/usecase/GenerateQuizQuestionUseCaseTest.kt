@@ -5,6 +5,7 @@ import com.flashlearn.domain.model.Content
 import com.flashlearn.domain.model.DifficultyState
 import com.flashlearn.domain.model.EntryType
 import com.flashlearn.domain.model.LanguagePair
+import com.flashlearn.domain.model.QuizDifficulty
 import com.flashlearn.domain.model.VocabularyDifficulty
 import com.flashlearn.domain.model.computeCanonicalKey
 import com.flashlearn.domain.repository.FakeConceptRepository
@@ -38,10 +39,11 @@ class GenerateQuizQuestionUseCaseTest {
         source: String,
         target: String,
         difficulty: VocabularyDifficulty = VocabularyDifficulty.EASY,
-        active: Boolean = true
+        active: Boolean = true,
+        categoryId: UUID? = null
     ): Concept {
         val concept = Concept(
-            id = UUID.randomUUID(), entryType = EntryType.WORD, categoryId = null,
+            id = UUID.randomUUID(), entryType = EntryType.WORD, categoryId = categoryId,
             favorite = false, active = active, createdAt = Instant.EPOCH, updatedAt = Instant.EPOCH
         )
         concepts.insert(concept)
@@ -207,5 +209,89 @@ class GenerateQuizQuestionUseCaseTest {
 
         val result = fx.useCase(main, pair, fx.difficultyStates.get(main.id)!!)
         assertEquals(QuizGenerationResult.FlashcardFallback, result)
+    }
+
+    @Test
+    fun `default MEDIUM quiz difficulty behaves exactly like before category-awareness existed`() = runTest {
+        val fx = Fixture()
+        val animalsCategory = UUID.randomUUID()
+        val main = fx.addConcept("el gato", "گربه", categoryId = animalsCategory)
+        fx.addConcept("el perro", "سگ", categoryId = animalsCategory)
+        fx.addConcept("la mesa", "میز", categoryId = null)
+        fx.addConcept("la silla", "صندلی", categoryId = null)
+
+        val result = fx.useCase(main, pair, fx.difficultyStates.get(main.id)!!) as QuizGenerationResult.QuizQuestion
+        assertEquals(4, result.options.size)
+        assertTrue(result.options.contains(result.correctAnswerText))
+    }
+
+    @Test
+    fun `HARD quiz difficulty prefers distractors from the same category when enough exist`() = runTest {
+        val fx = Fixture()
+        val animalsCategory = UUID.randomUUID()
+        val main = fx.addConcept("el gato", "گربه", categoryId = animalsCategory)
+        fx.addConcept("el perro", "سگ", categoryId = animalsCategory)
+        fx.addConcept("el pájaro", "پرنده", categoryId = animalsCategory)
+        fx.addConcept("el pez", "ماهی", categoryId = animalsCategory)
+        fx.addConcept("la mesa", "میز", categoryId = null)
+        fx.addConcept("la silla", "صندلی", categoryId = null)
+
+        val result = fx.useCase(
+            main, pair, fx.difficultyStates.get(main.id)!!, quizDifficulty = QuizDifficulty.HARD
+        ) as QuizGenerationResult.QuizQuestion
+
+        val wrongOptions = result.options.filter { it != result.correctAnswerText }
+        assertEquals(setOf("سگ", "پرنده", "ماهی"), wrongOptions.toSet())
+    }
+
+    @Test
+    fun `EASY quiz difficulty prefers distractors from a different category when enough exist`() = runTest {
+        val fx = Fixture()
+        val animalsCategory = UUID.randomUUID()
+        val main = fx.addConcept("el gato", "گربه", categoryId = animalsCategory)
+        fx.addConcept("el perro", "سگ", categoryId = animalsCategory)
+        fx.addConcept("la mesa", "میز", categoryId = null)
+        fx.addConcept("la silla", "صندلی", categoryId = null)
+        fx.addConcept("el libro", "کتاب", categoryId = null)
+
+        val result = fx.useCase(
+            main, pair, fx.difficultyStates.get(main.id)!!, quizDifficulty = QuizDifficulty.EASY
+        ) as QuizGenerationResult.QuizQuestion
+
+        val wrongOptions = result.options.filter { it != result.correctAnswerText }
+        assertEquals(setOf("میز", "صندلی", "کتاب"), wrongOptions.toSet())
+    }
+
+    @Test
+    fun `HARD quiz difficulty still fills remaining slots from other categories when not enough same-category candidates exist`() = runTest {
+        val fx = Fixture()
+        val animalsCategory = UUID.randomUUID()
+        val main = fx.addConcept("el gato", "گربه", categoryId = animalsCategory)
+        fx.addConcept("el perro", "سگ", categoryId = animalsCategory) // only 1 same-category candidate
+        fx.addConcept("la mesa", "میز", categoryId = null)
+        fx.addConcept("la silla", "صندلی", categoryId = null)
+
+        val result = fx.useCase(
+            main, pair, fx.difficultyStates.get(main.id)!!, quizDifficulty = QuizDifficulty.HARD
+        ) as QuizGenerationResult.QuizQuestion
+
+        assertEquals(4, result.options.size)
+        val wrongOptions = result.options.filter { it != result.correctAnswerText }
+        assertTrue("سگ" in wrongOptions)
+    }
+
+    @Test
+    fun `a concept with no category is never reordered by quiz difficulty`() = runTest {
+        val fx = Fixture()
+        val main = fx.addConcept("el gato", "گربه", categoryId = null)
+        fx.addConcept("el perro", "سگ", categoryId = null)
+        fx.addConcept("la mesa", "میز", categoryId = null)
+        fx.addConcept("la silla", "صندلی", categoryId = null)
+
+        val result = fx.useCase(
+            main, pair, fx.difficultyStates.get(main.id)!!, quizDifficulty = QuizDifficulty.HARD
+        ) as QuizGenerationResult.QuizQuestion
+
+        assertEquals(4, result.options.size)
     }
 }

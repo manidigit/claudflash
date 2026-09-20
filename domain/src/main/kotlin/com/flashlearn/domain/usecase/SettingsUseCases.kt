@@ -2,6 +2,7 @@ package com.flashlearn.domain.usecase
 
 import com.flashlearn.domain.model.AppSetting
 import com.flashlearn.domain.model.AppTheme
+import com.flashlearn.domain.model.QuizDifficulty
 import com.flashlearn.domain.model.SettingKeys
 import com.flashlearn.domain.repository.SettingsRepository
 import java.time.Instant
@@ -69,5 +70,39 @@ class SetThemeUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(theme: AppTheme, now: Instant) {
         settingsRepository.put(AppSetting(SettingKeys.THEME, theme.name, now))
+    }
+}
+
+/** Falls back to [QuizDifficulty.MEDIUM] when unset or unparsable — same default [GenerateQuizQuestionUseCase] itself uses. */
+class GetQuizDifficultyUseCase @Inject constructor(
+    private val settingsRepository: SettingsRepository
+) {
+    suspend operator fun invoke(): QuizDifficulty {
+        val raw = settingsRepository.findByKey(SettingKeys.QUIZ_DIFFICULTY)?.value
+        return QuizDifficulty.entries.firstOrNull { it.name == raw } ?: QuizDifficulty.MEDIUM
+    }
+}
+
+class SetQuizDifficultyUseCase @Inject constructor(
+    private val settingsRepository: SettingsRepository
+) {
+    suspend operator fun invoke(quizDifficulty: QuizDifficulty, now: Instant) {
+        settingsRepository.put(AppSetting(SettingKeys.QUIZ_DIFFICULTY, quizDifficulty.name, now))
+    }
+}
+
+/** Descriptions §16.2: "کاربر می‌تواند در تنظیمات، گزینه «رمزنگاری Backup» را فعال کند" — default false. */
+class GetBackupEncryptionEnabledUseCase @Inject constructor(
+    private val settingsRepository: SettingsRepository
+) {
+    suspend operator fun invoke(): Boolean =
+        settingsRepository.getBoolean(SettingKeys.BACKUP_ENCRYPTION_ENABLED, false)
+}
+
+class SetBackupEncryptionEnabledUseCase @Inject constructor(
+    private val settingsRepository: SettingsRepository
+) {
+    suspend operator fun invoke(enabled: Boolean, now: Instant) {
+        settingsRepository.put(AppSetting(SettingKeys.BACKUP_ENCRYPTION_ENABLED, enabled.toString(), now))
     }
 }

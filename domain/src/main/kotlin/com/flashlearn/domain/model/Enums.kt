@@ -86,3 +86,14 @@ enum class BackupType {
  * Phase 20 decision log in PROGRESS_TRACKER.md.
  */
 enum class AppTheme { LIGHT, DARK, SYSTEM }
+
+/**
+ * Distractor-selection difficulty for [com.flashlearn.domain.usecase.GenerateQuizQuestionUseCase]
+ * — Algorithms v4.20 O.3 Backlog #1: completely independent from
+ * [VocabularyDifficulty] ("Vocabulary Difficulty معیار انتخاب Distractor
+ * نیست" for this system). Not persisted per-Concept anywhere; it's a
+ * per-quiz generation-time parameter only (Phase 38 decision — see the
+ * tracker for the category-preference rule each level maps to, and why
+ * MEDIUM is defined as "no special treatment", not a half-strength HARD).
+ */
+enum class QuizDifficulty { EASY, MEDIUM, HARD }

@@ -4,11 +4,13 @@ import com.flashlearn.domain.model.Concept
 import com.flashlearn.domain.model.Content
 import com.flashlearn.domain.model.DifficultyState
 import com.flashlearn.domain.model.LanguagePair
+import com.flashlearn.domain.model.QuizDifficulty
 import com.flashlearn.domain.model.VocabularyDifficulty
 import com.flashlearn.domain.model.computeCanonicalKey
 import com.flashlearn.domain.repository.ConceptRepository
 import com.flashlearn.domain.repository.ContentRepository
 import com.flashlearn.domain.repository.DifficultyStateRepository
+import java.util.UUID
 import javax.inject.Inject
 
 /**
@@ -52,6 +54,28 @@ sealed interface QuizGenerationResult {
  *
  * If fewer than 3 valid Distractors exist even after step 3 →
  * [QuizGenerationResult.FlashcardFallback] (§ قانون ۱۸).
+ *
+ * [quizDifficulty] (Algorithms O.3 Backlog #1/#2/#3, Phase 38) is a
+ * SEPARATE, later re-ranking step over that SAME pool — it never changes
+ * which Contents are eligible, only which 3 are preferred once picking
+ * the final winners:
+ * - [QuizDifficulty.EASY]: Contents from a *different* Category than
+ *   [concept] are preferred ("نسبتاً متفاوت‌تر").
+ * - [QuizDifficulty.MEDIUM] (the default — preserves this Use Case's
+ *   exact pre-existing behavior byte-for-byte): no category preference
+ *   at all. The Algorithm's own text for MEDIUM ("Category یا
+ *   Subcategory مشابه") depends on a Subcategory/similarity concept that
+ *   does not exist anywhere in this domain model (Category is flat, no
+ *   hierarchy) — inventing one would be exactly the kind of unspecified
+ *   product decision this project avoids making unilaterally, so MEDIUM
+ *   is defined here as "no reordering", not a guessed approximation.
+ * - [QuizDifficulty.HARD]: Contents from the *same* Category as
+ *   [concept] are preferred ("همان ... Category در اولویت است").
+ * A Concept with `categoryId == null`, or too few same/different-category
+ * candidates to fill 3 slots, silently falls back to the rest of the
+ * pool — this preference can never be the reason a question falls back
+ * to [QuizGenerationResult.FlashcardFallback]; only "fewer than 3 valid
+ * Distractors at all" can.
  */
 class GenerateQuizQuestionUseCase @Inject constructor(
     private val contentRepository: ContentRepository,
@@ -61,7 +85,8 @@ class GenerateQuizQuestionUseCase @Inject constructor(
     suspend operator fun invoke(
         concept: Concept,
         activeLanguagePair: LanguagePair,
-        difficultyState: DifficultyState
+        difficultyState: DifficultyState,
+        quizDifficulty: QuizDifficulty = QuizDifficulty.MEDIUM
     ): QuizGenerationResult {
         val promptContent =
             contentRepository.getByConceptIdAndLanguage(concept.id, activeLanguagePair.sourceLanguage)
@@ -78,6 +103,10 @@ class GenerateQuizQuestionUseCase @Inject constructor(
         val otherConceptsPool = contentRepository.getAllByLanguageCode(activeLanguagePair.targetLanguage)
             .filter { it.conceptId != concept.id }
 
+        // conceptId -> Concept, filled in alongside pool-building below so the later
+        // category-preference step never has to re-query for the same Concept twice.
+        val conceptCache = mutableMapOf<UUID, Concept>()
+
         suspend fun findCandidates(difficultyFilter: VocabularyDifficulty?): List<Content> {
             if (otherConceptsPool.isEmpty()) return emptyList()
             val result = mutableListOf<Content>()
@@ -85,7 +114,9 @@ class GenerateQuizQuestionUseCase @Inject constructor(
                 if (normalize(content.text) == correctNormalized) continue
                 // getById only returns active (non soft-deleted) Concepts — an inactive
                 // Concept's translations are silently excluded from the Distractor pool.
-                val candidateConcept = conceptRepository.getById(content.conceptId) ?: continue
+                val candidateConcept = conceptCache.getOrPut(content.conceptId) {
+                    conceptRepository.getById(content.conceptId) ?: continue
+                }
                 if (difficultyFilter != null) {
                     val candidateDifficulty = difficultyStateRepository.get(candidateConcept.id)
                         ?: continue
@@ -119,7 +150,7 @@ class GenerateQuizQuestionUseCase @Inject constructor(
 
         if (candidates.size < 3) return QuizGenerationResult.FlashcardFallback
 
-        val wrongOptions = candidates.shuffled().take(3)
+        val wrongOptions = pickPreferringCategory(candidates, concept, quizDifficulty, conceptCache)
         val options = (listOf(correctContent.text) + wrongOptions.map { it.text }).shuffled()
 
         return QuizGenerationResult.QuizQuestion(
@@ -127,6 +158,28 @@ class GenerateQuizQuestionUseCase @Inject constructor(
             correctAnswerText = correctContent.text,
             options = options
         )
+    }
+
+    /** conceptCache is already fully populated for every Content in [pool] by the caller's findCandidates loop. */
+    private fun pickPreferringCategory(
+        pool: List<Content>,
+        concept: Concept,
+        quizDifficulty: QuizDifficulty,
+        conceptCache: Map<UUID, Concept>
+    ): List<Content> {
+        if (quizDifficulty == QuizDifficulty.MEDIUM || concept.categoryId == null) {
+            return pool.shuffled().take(3)
+        }
+
+        val sameCategory = pool.filter { conceptCache[it.conceptId]?.categoryId == concept.categoryId }
+        val otherCategory = pool.filter { conceptCache[it.conceptId]?.categoryId != concept.categoryId }
+
+        val ordered = when (quizDifficulty) {
+            QuizDifficulty.HARD -> sameCategory.shuffled() + otherCategory.shuffled()
+            QuizDifficulty.EASY -> otherCategory.shuffled() + sameCategory.shuffled()
+            QuizDifficulty.MEDIUM -> pool.shuffled() // unreachable, handled above; exhaustive `when` requires it
+        }
+        return ordered.take(3)
     }
 
     /**

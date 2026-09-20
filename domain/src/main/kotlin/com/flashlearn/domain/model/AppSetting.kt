@@ -27,4 +27,7 @@ object SettingKeys {
 
     /** Theme/Color Scheme (Descriptions §6/Backlog F, §12 Light+Dark support). */
     const val THEME = "theme"
+
+    /** Quiz Difficulty (Algorithms O.3 Backlog #1, Phase 38) — independent from Vocabulary Difficulty. Absent = MEDIUM. */
+    const val QUIZ_DIFFICULTY = "quiz_difficulty"
 }

@@ -67,10 +67,10 @@ Android SDK (compileSdk 34، minSdk 26).
 4. ~~هیچ Consumer واقعی از LanguagePairRepository نمی‌خواند~~ **رفع شد** — `ReviewViewModel` حالا از `GetActiveLanguagePairUseCase` واقعی می‌خواند.
 5. ~~Import/Export چندفرمتی (CSV/XLSX/SQLite طبق Algorithms §9) پیاده
    نشده~~ **بخش CSV رفع شد** (فاز ۳۷؛ صفحه Settings دکمه Import/Export CSV دارد) — XLSX و SQLite همچنان پیاده نشده‌اند (دلیل در «فاز ۳۷» تراکر: کتابخانه سنگین/غیرقابل‌تست برای XLSX، Schema ناشناس برای SQLite).
-6. **موارد Backlog صریح خودِ سند** (Quiz Difficulty مستقل از Vocabulary
-   Difficulty، Category-aware Distractor Selection، رمزنگاری Backup،
-   چند LanguagePair هم‌زمان) — طبق §19 سند، این‌ها از ابتدا «توسعه
-   آینده» اعلام شده بودند، نه بخشی از V1. **نکته مهم:** خودِ سند این موارد را با عبارت «هنوز Pseudocode یا Freeze نشده‌اند» توصیف می‌کند — یعنی پیاده‌سازی‌شان نیازمند اختراع تصمیم‌های طراحی مشخص‌نشده است، نه صرفاً کدنویسی طبق قرارداد موجود.
+6. **موارد Backlog صریح خودِ سند:**
+   - ~~Quiz Difficulty مستقل از Vocabulary Difficulty~~ + ~~Category-aware Distractor Selection~~ **رفع شد** (فاز ۳۸؛ سه‌سطحی EASY/MEDIUM/HARD در Settings).
+   - ~~رمزنگاری Backup~~ **رفع شد** (فاز ۳۸؛ AES/GCM با کلید مشتق از PIN کاربر — نه Android Keystore، به دلیلی که در تراکر توضیح داده شده).
+   - **چند LanguagePair هم‌زمان همچنان پیاده نشده** — نیازمند Migration واقعی Schema دیتابیس (افزودن `languagePairId` به `LearningState`)، عمداً به‌عنوان یک فاز جداگانه در آینده گذاشته شد، نه قاطی این فاز.
 
 ## مستندات
 

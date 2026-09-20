@@ -2,6 +2,7 @@ package com.flashlearn.domain.usecase
 
 import com.flashlearn.domain.model.AppSetting
 import com.flashlearn.domain.model.AppTheme
+import com.flashlearn.domain.model.QuizDifficulty
 import com.flashlearn.domain.model.SettingKeys
 import com.flashlearn.domain.repository.FakeSettingsRepository
 import kotlinx.coroutines.test.runTest
@@ -67,5 +68,29 @@ class SettingsUseCasesTest {
         val settings = FakeSettingsRepository()
         SetThemeUseCase(settings)(AppTheme.DARK, now)
         assertEquals(AppTheme.DARK, GetThemeUseCase(settings)())
+    }
+
+    @Test
+    fun `quiz difficulty defaults to MEDIUM when never set`() = runTest {
+        assertEquals(QuizDifficulty.MEDIUM, GetQuizDifficultyUseCase(FakeSettingsRepository())())
+    }
+
+    @Test
+    fun `setting and reading back quiz difficulty round-trips`() = runTest {
+        val settings = FakeSettingsRepository()
+        SetQuizDifficultyUseCase(settings)(QuizDifficulty.HARD, now)
+        assertEquals(QuizDifficulty.HARD, GetQuizDifficultyUseCase(settings)())
+    }
+
+    @Test
+    fun `backup encryption defaults to disabled`() = runTest {
+        assertEquals(false, GetBackupEncryptionEnabledUseCase(FakeSettingsRepository())())
+    }
+
+    @Test
+    fun `enabling backup encryption round-trips`() = runTest {
+        val settings = FakeSettingsRepository()
+        SetBackupEncryptionEnabledUseCase(settings)(true, now)
+        assertEquals(true, GetBackupEncryptionEnabledUseCase(settings)())
     }
 }
