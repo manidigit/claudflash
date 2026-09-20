@@ -10,17 +10,12 @@ import com.flashlearn.domain.repository.ConceptRepository
 import com.flashlearn.domain.repository.ConceptTagRepository
 import com.flashlearn.domain.repository.DifficultyStateRepository
 import com.flashlearn.domain.repository.LearningStateRepository
+import com.flashlearn.domain.repository.ReviewHistoryRepository
 import java.time.Instant
+import java.time.ZoneId
 import java.util.UUID
 import javax.inject.Inject
 
-/**
- * All filters are optional (AND-combined when present). [languagePair] is
- * accepted for forward compatibility with the Algorithm's general
- * contract, but is currently a no-op: V1's Concept/LearningState carry no
- * languagePairId (Descriptions §19.1 — multi-active-pair support is a
- * documented Future Extension), so there is nothing yet to filter on.
- */
 data class ReviewQueueFilters(
     val difficulty: VocabularyDifficulty? = null,
     val category: UUID? = null,
@@ -28,31 +23,26 @@ data class ReviewQueueFilters(
     val languagePair: UUID? = null
 )
 
-/**
- * SelectReviewQueue (Algorithms v4.20, "REVIEW SCHEDULING / CARD SELECTION
- * ALGORITHM", Final). Purely read-only: selects, filters and orders
- * Concepts for a Review Session. Never mutates Stage, Difficulty,
- * nextReviewAt, or any other state.
- *
- * - DAILY/WEEKLY/MONTHLY: candidates are LearningStates in that Stage
- *   with nextReviewAt <= now, ordered nextReviewAt ASC then Concept.id ASC.
- * - LEARNED: ALL LearningStates in Stage.LEARNED, regardless of
- *   nextReviewAt (which is ignored entirely), shuffled.
- * - RANDOM (Appendix O.1 correction, folded into this algorithm): due
- *   DAILY+WEEKLY+MONTHLY concepts only (LEARNED excluded), shuffled.
- *
- * A LearningState whose Concept is missing or soft-deleted is silently
- * dropped (§5: "اگر Concept مرتبط پیدا نشود، آن Candidate حذف می‌شود").
- * A LearningState whose Concept HAS no DifficultyState, however, is a
- * DATA_INTEGRITY_ERROR (never silently guessed) — same invariant as
- * SubmitReviewAnswerUseCase.
- */
 class SelectReviewQueueUseCase @Inject constructor(
     private val learningStateRepository: LearningStateRepository,
     private val difficultyStateRepository: DifficultyStateRepository,
     private val conceptRepository: ConceptRepository,
-    private val conceptTagRepository: ConceptTagRepository
+    private val conceptTagRepository: ConceptTagRepository,
+    private val reviewHistoryRepository: ReviewHistoryRepository
 ) {
+    constructor(
+        learningStateRepository: LearningStateRepository,
+        difficultyStateRepository: DifficultyStateRepository,
+        conceptRepository: ConceptRepository,
+        conceptTagRepository: ConceptTagRepository
+    ) : this(
+        learningStateRepository,
+        difficultyStateRepository,
+        conceptRepository,
+        conceptTagRepository,
+        EmptyReviewHistoryRepository
+    )
+
     private data class Candidate(
         val concept: Concept,
         val learningState: LearningState,
@@ -64,7 +54,7 @@ class SelectReviewQueueUseCase @Inject constructor(
         filters: ReviewQueueFilters = ReviewQueueFilters(),
         now: Instant
     ): List<Concept> {
-        val learningStates: List<LearningState> = when (reviewType) {
+        val learningStates = when (reviewType) {
             ReviewType.DAILY -> learningStateRepository.getDueByStage(Stage.DAILY, now)
             ReviewType.WEEKLY -> learningStateRepository.getDueByStage(Stage.WEEKLY, now)
             ReviewType.MONTHLY -> learningStateRepository.getDueByStage(Stage.MONTHLY, now)
@@ -72,28 +62,57 @@ class SelectReviewQueueUseCase @Inject constructor(
             ReviewType.RANDOM -> learningStateRepository.getAllDueNonLearned(now)
         }
 
-        val candidates = learningStates.mapNotNull { learningState ->
-            val concept = conceptRepository.getById(learningState.conceptId) ?: return@mapNotNull null
+        val localToday = now.atZone(ZoneId.systemDefault()).toLocalDate()
+        val practicedToday = reviewHistoryRepository.getAll()
+            .asSequence()
+            .filter {
+                it.reviewedAt.atZone(ZoneId.systemDefault()).toLocalDate() == localToday
+            }
+            .map { it.conceptId }
+            .toSet()
+
+        val candidates = ArrayList<Candidate>(learningStates.size)
+        for (learningState in learningStates) {
+            if (learningState.conceptId in practicedToday) continue
+
+            val concept = conceptRepository.getById(learningState.conceptId) ?: continue
             val difficulty = difficultyStateRepository.get(concept.id)
-                ?: throw DataIntegrityException("DifficultyState not found for concept ${concept.id}")
-            Candidate(concept, learningState, difficulty.current)
-        }.filter { candidate ->
-            (filters.difficulty == null || candidate.difficulty == filters.difficulty) &&
-                (filters.category == null || candidate.concept.categoryId == filters.category) &&
-                (
-                    filters.tag == null ||
-                        conceptTagRepository.getTagIdsForConcept(candidate.concept.id).contains(filters.tag)
-                    )
-            // filters.languagePair intentionally not applied — see ReviewQueueFilters KDoc.
-        }.distinctBy { it.concept.id }
+                ?: throw DataIntegrityException(
+                    "DifficultyState not found for concept " + concept.id
+                )
+
+            if (filters.difficulty != null && difficulty.current != filters.difficulty) continue
+            if (filters.category != null && concept.categoryId != filters.category) continue
+
+            if (filters.tag != null) {
+                val tagIds = conceptTagRepository.getTagIdsForConcept(concept.id)
+                if (filters.tag !in tagIds) continue
+            }
+
+            candidates += Candidate(concept, learningState, difficulty.current)
+        }
+
+        val uniqueCandidates = candidates.distinctBy { it.concept.id }
 
         val ordered = when (reviewType) {
             ReviewType.DAILY, ReviewType.WEEKLY, ReviewType.MONTHLY ->
-                candidates.sortedWith(compareBy({ it.learningState.nextReviewAt }, { it.concept.id }))
-            ReviewType.LEARNED, ReviewType.RANDOM ->
-                candidates.shuffled()
+                uniqueCandidates.sortedWith(
+                    compareBy<Candidate> { it.learningState.nextReviewAt }
+                        .thenBy { it.concept.id }
+                )
+            ReviewType.LEARNED, ReviewType.RANDOM -> uniqueCandidates.shuffled()
         }
 
         return ordered.map { it.concept }
+    }
+
+    private object EmptyReviewHistoryRepository : ReviewHistoryRepository {
+        override suspend fun insert(history: com.flashlearn.domain.model.ReviewHistory) = Unit
+        override suspend fun getById(id: UUID): com.flashlearn.domain.model.ReviewHistory? = null
+        override suspend fun getByConceptId(conceptId: UUID) = emptyList<com.flashlearn.domain.model.ReviewHistory>()
+        override suspend fun getBySessionId(sessionId: UUID) = emptyList<com.flashlearn.domain.model.ReviewHistory>()
+        override suspend fun existsByAttemptId(sessionId: UUID, attemptId: UUID) = false
+        override suspend fun getDistinctConceptIds() = emptyList<UUID>()
+        override suspend fun getAll() = emptyList<com.flashlearn.domain.model.ReviewHistory>()
     }
 }
