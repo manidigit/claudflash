@@ -11,9 +11,9 @@ import com.flashlearn.domain.usecase.EndReviewSessionUseCase
 import com.flashlearn.domain.usecase.GenerateQuizQuestionUseCase
 import com.flashlearn.domain.usecase.GetActiveLanguagePairUseCase
 import com.flashlearn.domain.usecase.GetDifficultyStateUseCase
-import com.flashlearn.domain.usecase.GetQuizDifficultyUseCase
 import com.flashlearn.domain.usecase.GetFlashcardContentUseCase
 import com.flashlearn.domain.usecase.GetMaxReviewCardsUseCase
+import com.flashlearn.domain.usecase.GetQuizDifficultyUseCase
 import com.flashlearn.domain.usecase.QuizGenerationResult
 import com.flashlearn.domain.usecase.SelectReviewQueueUseCase
 import com.flashlearn.domain.usecase.StartReviewSessionUseCase
@@ -29,38 +29,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** Descriptions §12.4: wrong answers pause on red feedback before advancing; correct answers advance immediately. */
 private const val WRONG_ANSWER_PAUSE_MS = 2000L
 
-/**
- * Runs one Review Session end to end: [SelectReviewQueueUseCase] builds
- * the queue, [StartReviewSessionUseCase] opens it, every answer — whether
- * it came from a Flashcard flip or a Quiz option tap — goes through the
- * single shared [SubmitReviewAnswerUseCase] path, and
- * [EndReviewSessionUseCase] closes it when the queue is exhausted.
- *
- * Flow: [initialize] (once, from the nav arg) → user optionally adjusts
- * [changeReviewType]/[changeMode] while state is [ReviewUiState.SelectingOptions]
- * → [start] (once) commits to one [ReviewType] + [ReviewMode] for the rest
- * of this ViewModel's lifetime — Descriptions doesn't describe switching
- * type or mode mid-session, so this deliberately doesn't allow it either.
- *
- * [GetActiveLanguagePairUseCase] is fetched once in [start] and reused
- * for every card — this is the first real caller of
- * [com.flashlearn.domain.repository.LanguagePairRepository] anywhere in
- * the app (closing that README/tracker gap); every earlier phase used
- * [com.flashlearn.domain.model.defaultV1LanguagePair] directly instead.
- *
- * [CheckAndUnlockAchievementsUseCase] runs once when the session
- * finishes, not after every single card — Algorithms v4.20 §11.4 allows
- * either trigger point ("بعد از هر پاسخ Review" یا "هنگام باز شدن صفحه
- * Statistics"); checking once per session-completion is symmetric with
- * [com.flashlearn.app.presentation.progress.ProgressViewModel] checking
- * once per screen-open, and avoids interrupting the answer flow with a
- * popup after every card. [com.flashlearn.app.presentation.progress.ProgressViewModel]
- * still also checks on its own screen open — that call is now a second,
- * redundant-but-harmless trigger point rather than the only one.
- */
 @HiltViewModel
 class ReviewViewModel @Inject constructor(
     private val selectReviewQueue: SelectReviewQueueUseCase,
@@ -86,12 +56,15 @@ class ReviewViewModel @Inject constructor(
     private var correctCount = 0
     private lateinit var activeLanguagePair: LanguagePair
     private var quizDifficulty: QuizDifficulty = QuizDifficulty.MEDIUM
+    private val quizExcludedDistractorTexts = mutableSetOf<String>()
 
-    /** Idempotent — shows the options picker pre-filled with [initialReviewType], defaulting mode to Flashcard. */
     fun initialize(initialReviewType: ReviewType) {
         if (initialized) return
         initialized = true
-        _uiState.value = ReviewUiState.SelectingOptions(reviewType = initialReviewType, mode = ReviewMode.FLASHCARD)
+        _uiState.value = ReviewUiState.SelectingOptions(
+            reviewType = initialReviewType,
+            mode = ReviewMode.FLASHCARD
+        )
     }
 
     fun changeReviewType(reviewType: ReviewType) {
@@ -104,7 +77,6 @@ class ReviewViewModel @Inject constructor(
         _uiState.value = current.copy(mode = mode)
     }
 
-    /** Idempotent — a second call once the session has already started is a no-op. */
     fun start() {
         if (started) return
         val options = _uiState.value as? ReviewUiState.SelectingOptions ?: return
@@ -114,8 +86,9 @@ class ReviewViewModel @Inject constructor(
             val now = Instant.now()
             activeLanguagePair = getActiveLanguagePair()
             quizDifficulty = getQuizDifficulty()
-            // Descriptions §6: this caps Session *size* only, never Eligibility —
-            // the due-set itself already came back from SelectReviewQueueUseCase.
+            quizExcludedDistractorTexts.clear()
+            generateQuizQuestion.refreshBank()
+
             val maxCards = getMaxReviewCards()
             val due = selectReviewQueue(options.reviewType, now = now)
             queue = if (maxCards != null) due.take(maxCards) else due
@@ -132,16 +105,32 @@ class ReviewViewModel @Inject constructor(
 
     private suspend fun showCard(reviewType: ReviewType, mode: ReviewMode, index: Int) {
         val concept = queue[index]
-        val flashcard = getFlashcardContent(concept.id, activeLanguagePair.sourceLanguage, activeLanguagePair.targetLanguage)
+        val flashcard = getFlashcardContent(
+            concept.id,
+            activeLanguagePair.sourceLanguage,
+            activeLanguagePair.targetLanguage
+        )
 
         val presentation: CardPresentation = if (mode == ReviewMode.QUIZ) {
             val difficultyState = getDifficultyState(concept.id)
-            when (val quiz = generateQuizQuestion(concept, activeLanguagePair, difficultyState, quizDifficulty)) {
-                is QuizGenerationResult.QuizQuestion -> CardPresentation.Quiz(
-                    options = quiz.options,
-                    correctAnswerText = quiz.correctAnswerText
+            when (
+                val quiz = generateQuizQuestion(
+                    concept = concept,
+                    activeLanguagePair = activeLanguagePair,
+                    difficultyState = difficultyState,
+                    quizDifficulty = quizDifficulty,
+                    excludedDistractorTexts = quizExcludedDistractorTexts
                 )
-                // Fewer than 3 valid Distractors — this one card falls back to Flashcard presentation.
+            ) {
+                is QuizGenerationResult.QuizQuestion -> {
+                    quizExcludedDistractorTexts += quiz.options.filter {
+                        it != quiz.correctAnswerText
+                    }
+                    CardPresentation.Quiz(
+                        options = quiz.options,
+                        correctAnswerText = quiz.correctAnswerText
+                    )
+                }
                 QuizGenerationResult.FlashcardFallback -> CardPresentation.Flashcard(
                     backText = flashcard.backText,
                     notes = flashcard.notes,
@@ -149,7 +138,11 @@ class ReviewViewModel @Inject constructor(
                 )
             }
         } else {
-            CardPresentation.Flashcard(backText = flashcard.backText, notes = flashcard.notes, isFlipped = false)
+            CardPresentation.Flashcard(
+                backText = flashcard.backText,
+                notes = flashcard.notes,
+                isFlipped = false
+            )
         }
 
         _uiState.value = ReviewUiState.InProgress(
@@ -162,7 +155,6 @@ class ReviewViewModel @Inject constructor(
         )
     }
 
-    /** Reveals the back of the current card. Only applies to a [CardPresentation.Flashcard]; no-op once already answered. */
     fun flip() {
         val current = _uiState.value as? ReviewUiState.InProgress ?: return
         if (current.feedback != null) return
@@ -170,17 +162,17 @@ class ReviewViewModel @Inject constructor(
         _uiState.value = current.copy(presentation = flashcard.copy(isFlipped = true))
     }
 
-    /** [isCorrect]: true = "بلدم", false = "بلد نیستم". Ignored once this card already has feedback. */
     fun answerFlashcard(isCorrect: Boolean) {
         val current = _uiState.value as? ReviewUiState.InProgress ?: return
         if (current.feedback != null) return
         if (current.presentation !is CardPresentation.Flashcard) return
 
-        _uiState.value = current.copy(feedback = if (isCorrect) AnswerFeedback.CORRECT else AnswerFeedback.WRONG)
+        _uiState.value = current.copy(
+            feedback = if (isCorrect) AnswerFeedback.CORRECT else AnswerFeedback.WRONG
+        )
         submitAndAdvance(current, isCorrect)
     }
 
-    /** Correctness is decided by comparing [option] to the Quiz's own correct answer. Ignored once already answered. */
     fun selectQuizOption(option: String) {
         val current = _uiState.value as? ReviewUiState.InProgress ?: return
         if (current.feedback != null) return
@@ -194,7 +186,6 @@ class ReviewViewModel @Inject constructor(
         submitAndAdvance(current, isCorrect)
     }
 
-    /** Shared submit-then-advance tail for both answer paths — this is the one place [SubmitReviewAnswerUseCase] is called from. */
     private fun submitAndAdvance(current: ReviewUiState.InProgress, isCorrect: Boolean) {
         val session = sessionId ?: return
         val concept = queue[current.currentIndex]
