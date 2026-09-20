@@ -72,7 +72,7 @@ class SubmitReviewAnswerIntegrationTest {
     @Test
     fun `correct DAILY answer transitions to WEEKLY and appends one ReviewHistory row`() = runTest {
         val conceptId = createConcept(CreateConceptCommand(sourceText = "hola", targetText = "سلام"))
-        val now = Instant.now().plusSeconds(60) // a new word is due at creation time, so answer after it
+        val now = Instant.ofEpochMilli(System.currentTimeMillis() + 60_000) // a new word is due at creation time, so answer after it
         val sessionId = UUID.randomUUID()
         val attemptId = UUID.randomUUID()
 
@@ -96,7 +96,7 @@ class SubmitReviewAnswerIntegrationTest {
     @Test
     fun `replaying the same session and attempt id is rejected and changes nothing`() = runTest {
         val conceptId = createConcept(CreateConceptCommand(sourceText = "hola", targetText = "سلام"))
-        val now = Instant.now().plusSeconds(60) // a new word is due at creation time, so answer after it
+        val now = Instant.ofEpochMilli(System.currentTimeMillis() + 60_000) // a new word is due at creation time, so answer after it
         val sessionId = UUID.randomUUID()
         val attemptId = UUID.randomUUID()
         val request = SubmitReviewAnswerRequest(
@@ -178,7 +178,7 @@ class SubmitReviewAnswerIntegrationTest {
         val conceptId = createConcept(CreateConceptCommand(sourceText = "hola", targetText = "سلام"))
         // Force the concept into WEEKLY first, via a real correct DAILY answer.
         // (A new word is due at creation time, so the first answer must come after it.)
-        val firstAnswerAt = Instant.now().plusSeconds(60)
+        val firstAnswerAt = Instant.ofEpochMilli(System.currentTimeMillis() + 60_000)
         submitReviewAnswer(
             SubmitReviewAnswerRequest(
                 conceptId = conceptId, sessionId = UUID.randomUUID(), reviewAttemptId = UUID.randomUUID(),
