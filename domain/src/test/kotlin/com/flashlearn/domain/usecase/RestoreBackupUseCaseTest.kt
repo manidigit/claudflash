@@ -7,6 +7,8 @@ import com.flashlearn.domain.model.Content
 import com.flashlearn.domain.model.DifficultyState
 import com.flashlearn.domain.model.EntryType
 import com.flashlearn.domain.model.ExportData
+import com.flashlearn.domain.model.Language
+import com.flashlearn.domain.model.LanguagePair
 import com.flashlearn.domain.model.LearningState
 import com.flashlearn.domain.model.ReviewHistory
 import com.flashlearn.domain.model.ReviewSession
@@ -97,7 +99,14 @@ class RestoreBackupUseCaseTest {
         consecutiveCorrect = 0, consecutiveWrong = 0, hasReachedVeryHard = false
     )
 
+    private fun language(code: String, id: UUID = UUID.randomUUID()) = Language(id, code, code.uppercase())
+
+    private fun pair(source: String, target: String, active: Boolean, id: UUID = UUID.randomUUID()) =
+        LanguagePair(id, source, target, active)
+
     private fun fullExport(
+        languages: List<Language> = emptyList(),
+        languagePairs: List<LanguagePair> = emptyList(),
         concepts: List<Concept> = emptyList(),
         contents: List<Content> = emptyList(),
         tags: List<Tag> = emptyList(),
@@ -109,6 +118,7 @@ class RestoreBackupUseCaseTest {
         schemaVersion: Int = 1
     ) = ExportData(
         schemaVersion = schemaVersion, exportedAt = now, backupType = BackupType.FULL,
+        languages = languages, languagePairs = languagePairs,
         concepts = concepts, contents = contents, tags = tags, conceptTags = conceptTags,
         reviewSessions = reviewSessions, reviewHistory = reviewHistory,
         learningStates = learningStates, difficultyStates = difficultyStates
@@ -298,6 +308,72 @@ class RestoreBackupUseCaseTest {
 
         assertTrue(first.newCount > second.newCount)
         assertEquals(1, fx.conceptTags.getTagIdsForConcept(c.id).size)
+    }
+
+    @Test
+    fun `a Language with the same code but a different id is merged into the local row, not inserted`() = runTest {
+        val fx = Fixture()
+        val local = language("es")
+        fx.languages.insert(local)
+        val data = fullExport(languages = listOf(language("es"))) // same code, different random id
+
+        val result = fx.restoreBackup(data, 1, now, alwaysPersist, alwaysConfirm)
+            as RestoreResult.Success
+
+        assertEquals(0, result.newCount)
+        assertEquals(1, result.mergedCount)
+        assertEquals(listOf(local), fx.languages.getAll())
+    }
+
+    @Test
+    fun `a LanguagePair with the same languages under a different id keeps the local row and its id`() = runTest {
+        val fx = Fixture()
+        val localPair = pair("es", "fa", active = true)
+        fx.languagePairs.insert(localPair)
+        val data = fullExport(
+            languages = listOf(language("es"), language("fa")),
+            languagePairs = listOf(pair("es", "fa", active = true)) // different random id
+        )
+
+        val result = fx.restoreBackup(data, 1, now, alwaysPersist, alwaysConfirm)
+            as RestoreResult.Success
+
+        assertEquals(2, result.newCount) // the two Languages
+        assertEquals(1, result.mergedCount) // the pair
+        assertEquals(listOf(localPair), fx.languagePairs.getAll())
+    }
+
+    @Test
+    fun `an incoming active LanguagePair is stored inactive when the device already has an active one`() = runTest {
+        val fx = Fixture()
+        val localPair = pair("es", "fa", active = true)
+        fx.languagePairs.insert(localPair)
+        val incoming = pair("en", "fa", active = true)
+        val data = fullExport(
+            languages = listOf(language("en"), language("fa")),
+            languagePairs = listOf(incoming)
+        )
+
+        fx.restoreBackup(data, 1, now, alwaysPersist, alwaysConfirm)
+
+        val all = fx.languagePairs.getAll()
+        assertEquals(2, all.size)
+        assertEquals(localPair.id, all.filter { it.isActive }.single().id)
+        assertEquals(false, all.first { it.id == incoming.id }.isActive)
+    }
+
+    @Test
+    fun `an incoming active LanguagePair stays active when the device has none`() = runTest {
+        val fx = Fixture()
+        val incoming = pair("es", "fa", active = true)
+        val data = fullExport(
+            languages = listOf(language("es"), language("fa")),
+            languagePairs = listOf(incoming)
+        )
+
+        fx.restoreBackup(data, 1, now, alwaysPersist, alwaysConfirm)
+
+        assertEquals(incoming, fx.languagePairs.getActive())
     }
 
     @Test

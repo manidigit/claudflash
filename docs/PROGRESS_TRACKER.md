@@ -1,6 +1,6 @@
 # FlashLearn — Progress Tracker (بازنویسی کامل v5.0)
 
-**آخرین به‌روزرسانی:** 2026-09-20 (فاز ۴۰ — رفع باگ کامپایل واقعی در AddWordScreen)
+**آخرین به‌روزرسانی:** 2026-09-20 (فاز ۴۲ — رفع تست CSV؛ اولین `assembleDebug` موفق روی v1.4.3)
 **مرجع مشخصات:** Algorithms v4.20 + Descriptions v4.20
 **نوع کار:** بازنویسی کامل از صفر (نه ادامه کد قبلی v4.36)
 **تقسیم‌بندی:** ۳۰ مرحله؛ هر مرحله یک zip کامل و قابل build
@@ -680,7 +680,38 @@ AddWordScreen.kt:140:5 / 146:30 / 146:58 / 147:48 / 149:9  This material API is 
 - نام تست‌های backtick (۲۸۴ مورد) برای کاراکترهای غیرمجاز JVM، نام تکراری در یک کلاس، و اشتباه JUnit4/JUnit5 بر حسب ماژول اسکن شدند.
 - **محدودیت صادقانه:** این محیط Gradle/Kotlin Compiler ندارد؛ همه‌ی موارد بالا بررسی ایستا است، نه اجرای واقعی. تأیید نهایی همچنان CI است.
 
-**شکاف باز (رفع نشد؛ باگ منطقی، نه build):** هیچ کدی هیچ ردیف `Language` را Seed نمی‌کند (فقط `EnsureDefaultLanguagePairUseCase` یک `LanguagePair` می‌سازد). `validateBackup()` (طبق Algorithms §۹) هر `LanguagePair` را که `sourceLanguage/targetLanguage`اش در `languages` همان Backup نباشد نامعتبر می‌داند. نتیجه: Backup از نوع VOCABULARY/FULL که خودِ اپ می‌سازد، در Restore با `Error` رد می‌شود. PROGRESS تحت تأثیر نیست. رفع نیازمند تصمیم صریح (Seed کردن Language برای es/fa، یا تغییر قاعده‌ی Validator) است؛ عمداً بدون تأیید کاربر انجام نشد.
+**شکاف باز (در فاز ۴۱ رفع شد؛ باگ منطقی، نه build):** هیچ کدی هیچ ردیف `Language` را Seed نمی‌کند (فقط `EnsureDefaultLanguagePairUseCase` یک `LanguagePair` می‌سازد). `validateBackup()` (طبق Algorithms §۹) هر `LanguagePair` را که `sourceLanguage/targetLanguage`اش در `languages` همان Backup نباشد نامعتبر می‌داند. نتیجه: Backup از نوع VOCABULARY/FULL که خودِ اپ می‌سازد، در Restore با `Error` رد می‌شود. PROGRESS تحت تأثیر نیست. رفع نیازمند تصمیم صریح (Seed کردن Language برای es/fa، یا تغییر قاعده‌ی Validator) است؛ عمداً بدون تأیید کاربر انجام نشد.
+
+## فاز ۴۱ (بعد از v1.4.2): Seed زبان‌ها + شناسه‌ی قطعی + مقاوم‌سازی Restore
+
+رفع «شکاف باز» فاز ۴۰: Backup نوع VOCABULARY/FULL که خودِ اپ می‌ساخت در Restore با `Error` رد می‌شد، چون `LanguagePair` seed‌شده بود ولی هیچ ردیف `Language` وجود نداشت و `validateBackup()` (Algorithms §۹) این را نامعتبر می‌داند. **تصمیم (با تأیید کاربر): Seed، نه شل‌کردن Validator** — قانون فریز‌شده §۹ دست‌نخورده ماند و داده‌ی جدول درست شد.
+
+**تغییرات:**
+- `domain/model/Language.kt`: `deterministicLanguageId(code)` و `deterministicLanguagePairId(source, target)` (`UUID.nameUUIDFromBytes`)؛ لیست `V1_LANGUAGES` (fa، en، es) به‌عنوان تنها منبع Seed — افزودن زبان جدید در آینده = یک خط در همین لیست. `defaultV1LanguagePair()` هم حالا شناسه‌ی قطعی دارد (همان شناسه‌ای که Seed ذخیره می‌کند).
+- `EnsureDefaultLanguagesUseCase` (جدید): ایدمپوتنت، بر اساس `code` (ستون `code` در جدول UNIQUE است)؛ ردیف موجود دست‌نخورده می‌ماند، فقط موارد گمشده Insert می‌شوند.
+- `EnsureDefaultLanguagePairUseCase`: شناسه‌ی قطعی؛ اگر همان ردیف غیرفعال وجود داشته باشد فعالش می‌کند (به‌جای Insert محکوم به شکست).
+- `StartupViewModel`: اول زبان‌ها، بعد Pair (ترتیب مهم است).
+- `RestoreBackupUseCase` — دو مقاوم‌سازی:
+  1. Language با همان `code` ولی شناسه‌ی متفاوت → با ردیف محلی Merge می‌شود، Insert دوم انجام نمی‌شود (وگرنه نقض UNIQUE(code)).
+  2. LanguagePair: ابتدا با id، بعد با همان (source,target) تحت شناسه‌ی متفاوت پیدا می‌شود (نصب‌های قدیمی با شناسه‌ی تصادفی)؛ ردیف محلی و `isActive` آن حفظ می‌شود. Pair جدیدِ فعال فقط وقتی فعال Insert می‌شود که دستگاه هیچ Pair فعالی نداشته باشد — Restore هرگز خودش دومین Pair فعال (نقض ایندکس یکتای جزئی) نمی‌سازد.
+
+**تست:** ۶ تست `EnsureDefaultLanguagesUseCaseTest`، ۲ تست جدید Pair، ۴ تست جدید `RestoreBackupUseCaseTest`، و یک کلاس Room واقعی `LanguageSeedBackupRestoreIntegrationTest` (۳ سناریو: Seed→Backup→Restore روی دیتابیس Seed‌شده؛ روی دیتابیس بدون Seed؛ روی Pair قدیمی با شناسه‌ی تصادفی).
+
+**محدودیت صادقانه:** مثل فاز ۴۰، بررسی ایستا است؛ Gradle اینجا اجرا نشده. نصب‌های موجود که Pair تصادفی دارند تغییر نمی‌کنند (Seed فقط زبان‌های گمشده را اضافه می‌کند و Pair فعال موجود را حفظ می‌کند).
+
+## فاز ۴۲ (بعد از v1.4.3): پنجمین اجرای واقعی CI — `assembleDebug` موفق، ۱ باگ واقعی در `gradle test`
+
+**خبر خوب:** `v1.4.3` اولین نسخه‌ای بود که `gradle clean assembleDebug` را کامل گذراند (`BUILD SUCCESSFUL`) — یعنی رفع `AddWordScreen` (فاز ۴۰) و گراف Hilt درست بودند. همه‌ی سورس‌های تست هم کامپایل شدند و در `:domain:test`، ۲۱۸ تست اجرا شد؛ همه‌ی تست‌های جدید فاز ۴۱ (Seed زبان‌ها، Restore) هم گذشتند. فقط یک تست شکست خورد:
+
+```
+VocabularyCsvUseCasesTest > importing the same csv twice reports AlreadyExists the second time() FAILED
+```
+
+**علت (باگ واقعی در کد تولیدی، نه فقط در تست):** `VocabularyCsv.decode` فقط هدر کامل `source,target,notes` را تشخیص می‌داد. تست فایل `source,target\nhola,سلام` (هدر دو ستونه) می‌داد؛ این هدر به‌عنوان یک ردیف داده خوانده می‌شد و یک کلمه‌ی ساختگی «source → target» Import می‌شد (نتیجه: ۲ Concept به‌جای ۱، `alreadyExists=2` به‌جای ۱). کاربری که فایل CSV دستی با هدر دو ستونه بنویسد دقیقاً همین را می‌دید.
+
+**رفع:** `isHeaderLine()` — هدر `source,target` یا `source,target,notes` (بدون حساسیت به حروف/فاصله) تشخیص و رد می‌شود. دو تست جدید در `VocabularyCsvTest` (هدر دو ستونه؛ حروف بزرگ و فاصله).
+
+**نکته درباره‌ی بقیه‌ی `gradle test`:** چون `:domain:test` شکست خورد، Gradle اجرای `:data:test` و `:database:test` (Robolectric/Room واقعی؛ شامل `LanguageSeedBackupRestoreIntegrationTest`) را پیش از پایان قطع کرد و نتیجه‌ی آن‌ها در این لاگ نیست. تأیید آن‌ها به اجرای بعدی CI موکول شد.
 
 ## نکات فنی مهم برای مراحل بعد
 

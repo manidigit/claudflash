@@ -43,7 +43,7 @@ object VocabularyCsv {
     fun decode(text: String): List<VocabularyCsvRow> {
         val lines = text.lines().filter { it.isNotBlank() }
         if (lines.isEmpty()) return emptyList()
-        val dataLines = if (lines.first().trim().equals(HEADER, ignoreCase = true)) lines.drop(1) else lines
+        val dataLines = if (isHeaderLine(lines.first())) lines.drop(1) else lines
 
         return dataLines.mapNotNull { line ->
             val columns = parseLine(line)
@@ -53,6 +53,17 @@ object VocabularyCsv {
             if (source.isEmpty() || target.isEmpty()) return@mapNotNull null
             VocabularyCsvRow(source, target, columns.getOrNull(2)?.trim()?.takeIf { it.isNotEmpty() })
         }
+    }
+
+    /**
+     * A header row is `source,target` or `source,target,notes` (any case, optional
+     * spaces). Both forms must be recognised: a hand-written file will often omit the
+     * optional `notes` column name, and treating that header as data would silently
+     * import a bogus "source → target" word.
+     */
+    private fun isHeaderLine(line: String): Boolean {
+        val columns = parseLine(line).map { it.trim().lowercase() }
+        return columns == listOf("source", "target") || columns == listOf("source", "target", "notes")
     }
 
     private fun escape(value: String): String =

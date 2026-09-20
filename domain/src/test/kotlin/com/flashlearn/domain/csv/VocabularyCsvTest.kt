@@ -45,6 +45,21 @@ class VocabularyCsvTest {
     }
 
     @Test
+    fun `a two-column header row is recognised and skipped, not imported as a word`() {
+        val decoded = VocabularyCsv.decode("source,target\nhola,سلام")
+
+        assertEquals(listOf(VocabularyCsvRow("hola", "سلام", null)), decoded)
+    }
+
+    @Test
+    fun `header detection ignores case and surrounding spaces`() {
+        val decoded = VocabularyCsv.decode(" Source , TARGET , Notes \nhola,سلام")
+
+        assertEquals(1, decoded.size)
+        assertEquals("hola", decoded[0].sourceText)
+    }
+
+    @Test
     fun `rows missing a target column are skipped, not thrown`() {
         val decoded = VocabularyCsv.decode("source,target,notes\nhola,سلام\nonlyonecolumn")
 

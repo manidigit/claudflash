@@ -1,6 +1,7 @@
 package com.flashlearn.domain.usecase
 
 import com.flashlearn.domain.model.LanguagePair
+import com.flashlearn.domain.model.deterministicLanguagePairId
 import com.flashlearn.domain.repository.FakeLanguagePairRepository
 import java.util.UUID
 import kotlinx.coroutines.test.runTest
@@ -34,6 +35,29 @@ class EnsureDefaultLanguagePairUseCaseTest {
 
         assertEquals(existing, result)
         assertEquals(1, repository.getAll().size)
+    }
+
+    @Test
+    fun `the seeded pair uses the deterministic id`() = runTest {
+        val repository = FakeLanguagePairRepository()
+
+        val result = EnsureDefaultLanguagePairUseCase(repository)()
+
+        assertEquals(deterministicLanguagePairId("es", "fa"), result.id)
+    }
+
+    @Test
+    fun `re-activates the deterministic pair if it exists but is inactive`() = runTest {
+        val repository = FakeLanguagePairRepository()
+        repository.insert(
+            LanguagePair(deterministicLanguagePairId("es", "fa"), "es", "fa", isActive = false)
+        )
+
+        val result = EnsureDefaultLanguagePairUseCase(repository)()
+
+        assertTrue(result.isActive)
+        assertEquals(1, repository.getAll().size)
+        assertEquals(result, repository.getActive())
     }
 
     @Test

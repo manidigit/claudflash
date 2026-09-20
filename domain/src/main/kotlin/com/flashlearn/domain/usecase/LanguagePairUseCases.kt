@@ -1,10 +1,44 @@
 package com.flashlearn.domain.usecase
 
+import com.flashlearn.domain.model.Language
 import com.flashlearn.domain.model.LanguagePair
+import com.flashlearn.domain.model.V1_LANGUAGES
 import com.flashlearn.domain.model.defaultV1LanguagePair
+import com.flashlearn.domain.model.deterministicLanguagePairId
 import com.flashlearn.domain.repository.LanguagePairRepository
-import java.util.UUID
+import com.flashlearn.domain.repository.LanguageRepository
 import javax.inject.Inject
+
+/**
+ * Makes sure every language in [V1_LANGUAGES] exists as a real row in
+ * `languages`. Before Phase 41 nothing ever wrote a Language row, so a
+ * Backup containing the seeded [LanguagePair] but no Language failed
+ * `validateBackup()` (Algorithms §9: a pair's language codes must exist
+ * in the same Backup) and could never be restored.
+ *
+ * Idempotent and safe on every app start: rows are matched by `code`
+ * (UNIQUE in the schema); an existing row is returned untouched, only
+ * missing ones are inserted. Ids are deterministic
+ * ([com.flashlearn.domain.model.deterministicLanguageId]), so the same
+ * language has the same id on every device.
+ */
+class EnsureDefaultLanguagesUseCase @Inject constructor(
+    private val languageRepository: LanguageRepository
+) {
+    suspend operator fun invoke(): List<Language> {
+        val result = mutableListOf<Language>()
+        for (language in V1_LANGUAGES) {
+            val existing = languageRepository.getByCode(language.code)
+            if (existing != null) {
+                result.add(existing)
+            } else {
+                languageRepository.insert(language)
+                result.add(language)
+            }
+        }
+        return result
+    }
+}
 
 /**
  * Makes sure exactly one real, persisted [LanguagePair] row exists and is
@@ -35,8 +69,18 @@ class EnsureDefaultLanguagePairUseCase @Inject constructor(
     suspend operator fun invoke(): LanguagePair {
         languagePairRepository.getActive()?.let { return it }
 
+        // Deterministic id (same on every device). If that exact row somehow already
+        // exists but is inactive, re-activate it instead of a doomed duplicate-PK insert.
+        val id = deterministicLanguagePairId("es", "fa")
+        val inactive = languagePairRepository.getById(id)
+        if (inactive != null) {
+            val reactivated = inactive.copy(isActive = true)
+            languagePairRepository.update(reactivated)
+            return reactivated
+        }
+
         val pair = LanguagePair(
-            id = UUID.randomUUID(),
+            id = id,
             sourceLanguage = "es",
             targetLanguage = "fa",
             isActive = true

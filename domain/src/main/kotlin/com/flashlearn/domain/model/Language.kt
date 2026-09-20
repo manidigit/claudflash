@@ -23,16 +23,41 @@ data class LanguagePair(
 )
 
 /**
- * V1's single hardcoded default pair. Nothing in the project seeds or
- * activates a real [LanguagePair] row yet (Phase 25 decision —
- * `LanguagePairRepository.getActive()` returns null on a fresh install),
- * so callers that need a concrete [LanguagePair] value object (e.g.
- * [com.flashlearn.domain.usecase.GenerateQuizQuestionUseCase]) use this
- * instead of querying the repository. [id] is never persisted or looked
- * up — it only exists to satisfy the shape of [LanguagePair].
+ * Stable, deterministic id for a Language, derived only from its [code].
+ * The same code therefore gets the SAME id on every install — this is
+ * what lets Backup/Restore between two devices match "es" with "es" by
+ * id instead of colliding on the UNIQUE `code` index (Phase 41).
+ */
+fun deterministicLanguageId(code: String): UUID =
+    UUID.nameUUIDFromBytes("flashlearn:language:$code".toByteArray(Charsets.UTF_8))
+
+/** Same idea as [deterministicLanguageId], for the default source→target pair. */
+fun deterministicLanguagePairId(sourceLanguage: String, targetLanguage: String): UUID =
+    UUID.nameUUIDFromBytes(
+        "flashlearn:language_pair:$sourceLanguage:$targetLanguage".toByteArray(Charsets.UTF_8)
+    )
+
+/**
+ * The languages V1 supports (Descriptions §1: Persian, English, Spanish).
+ * Single source of truth for seeding — adding a supported language later
+ * means adding one entry here; [com.flashlearn.domain.usecase.EnsureDefaultLanguagesUseCase]
+ * inserts whatever is missing (matched by `code`) on the next app start.
+ */
+val V1_LANGUAGES: List<Language> = listOf(
+    Language(deterministicLanguageId("fa"), "fa", "فارسی"),
+    Language(deterministicLanguageId("en"), "en", "English"),
+    Language(deterministicLanguageId("es"), "es", "Español")
+)
+
+/**
+ * V1's single hardcoded default pair. Used as a value object by callers
+ * that need a concrete [LanguagePair] when the repository has none
+ * (see [com.flashlearn.domain.usecase.GetActiveLanguagePairUseCase]).
+ * Its id is deterministic and identical to the one
+ * [com.flashlearn.domain.usecase.EnsureDefaultLanguagePairUseCase] persists.
  */
 fun defaultV1LanguagePair(): LanguagePair = LanguagePair(
-    id = UUID.randomUUID(),
+    id = deterministicLanguagePairId("es", "fa"),
     sourceLanguage = "es",
     targetLanguage = "fa",
     isActive = true

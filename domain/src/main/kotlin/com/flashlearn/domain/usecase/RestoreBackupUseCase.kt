@@ -104,12 +104,19 @@ class RestoreBackupUseCase @Inject constructor(
 
         // ۳.۱ Languages
         data.languages.forEach { language ->
-            if (languageRepository.getById(language.id) != null) {
-                languageRepository.update(language)
-                mergedCount++
-            } else {
-                languageRepository.insert(language)
-                newCount++
+            when {
+                languageRepository.getById(language.id) != null -> {
+                    languageRepository.update(language)
+                    mergedCount++
+                }
+                // `code` is UNIQUE. Same code under a different id is the same language (e.g. a
+                // row created before ids were deterministic) — keep the local row, never insert
+                // a second one. LanguagePairs reference languages by code, so nothing dangles.
+                languageRepository.getByCode(language.code) != null -> mergedCount++
+                else -> {
+                    languageRepository.insert(language)
+                    newCount++
+                }
             }
         }
 
@@ -137,12 +144,23 @@ class RestoreBackupUseCase @Inject constructor(
 
         // ۳.۴ LanguagePairs (sourceLanguage/targetLanguage are codes, not FKs to Language.id —
         // no id-remapping needed, see the Phase 16/17 decision log)
+        //
+        // "At most one active pair" is enforced by a partial UNIQUE index, so Restore must never
+        // be the thing that creates a second one: the device's own active choice always wins.
+        // An existing pair is matched by id first, then by the same (source,target) codes under
+        // a different id (installs from before ids were deterministic); either way the local row
+        // and its isActive flag are kept.
         data.languagePairs.forEach { pair ->
-            if (languagePairRepository.getById(pair.id) != null) {
-                languagePairRepository.update(pair)
+            val existing = languagePairRepository.getById(pair.id)
+                ?: languagePairRepository.getAll().find {
+                    it.sourceLanguage == pair.sourceLanguage && it.targetLanguage == pair.targetLanguage
+                }
+            if (existing != null) {
+                languagePairRepository.update(pair.copy(id = existing.id, isActive = existing.isActive))
                 mergedCount++
             } else {
-                languagePairRepository.insert(pair)
+                val canBeActive = pair.isActive && languagePairRepository.getActive() == null
+                languagePairRepository.insert(pair.copy(isActive = canBeActive))
                 newCount++
             }
         }
