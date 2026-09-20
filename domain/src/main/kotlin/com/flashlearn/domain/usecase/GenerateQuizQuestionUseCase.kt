@@ -1,196 +1,353 @@
 package com.flashlearn.domain.usecase
 
-import com.flashlearn.domain.model.Concept
 import com.flashlearn.domain.model.Content
+import com.flashlearn.domain.model.Concept
 import com.flashlearn.domain.model.DifficultyState
-import com.flashlearn.domain.model.LanguagePair
+import com.flashlearn.domain.model.EntryType
 import com.flashlearn.domain.model.QuizDifficulty
 import com.flashlearn.domain.model.VocabularyDifficulty
 import com.flashlearn.domain.model.computeCanonicalKey
-import com.flashlearn.domain.repository.ConceptRepository
+import com.flashlearn.domain.model.LanguagePair
 import com.flashlearn.domain.repository.ContentRepository
+import com.flashlearn.domain.repository.ConceptRepository
 import com.flashlearn.domain.repository.DifficultyStateRepository
+import java.text.Normalizer
+import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
+import kotlin.math.max
+import kotlin.math.min
 
-/**
- * Result of [GenerateQuizQuestionUseCase] — exactly one of the two shapes
- * defined by the Algorithm (Algorithms v4.20 §12.4).
- */
+private fun normalizeQuizText(text: String): String =
+    Normalizer.normalize(text.trim().replace(Regex("\\s+"), " "), Normalizer.Form.NFC)
+        .lowercase(Locale.ROOT)
+
+private fun quizTokens(text: String): Set<String> =
+    normalizeQuizText(text)
+        .split(Regex("[^\\p{L}\\p{N}]+"))
+        .filter { it.isNotBlank() }
+        .toSet()
+
+private fun levenshteinSimilarity(a: String, b: String): Double {
+    if (a == b) return 1.0
+    if (a.isEmpty() || b.isEmpty()) return 0.0
+    var previous = IntArray(b.length + 1) { it }
+    var current = IntArray(b.length + 1)
+    for (i in a.indices) {
+        current[0] = i + 1
+        for (j in b.indices) {
+            val substitution = previous[j] + if (a[i] == b[j]) 0 else 1
+            current[j + 1] = min(min(previous[j + 1] + 1, current[j] + 1), substitution)
+        }
+        val tmp = previous
+        previous = current
+        current = tmp
+    }
+    return 1.0 - previous[b.length].toDouble() / max(a.length, b.length).toDouble()
+}
+
+private fun ngramSimilarity(a: String, b: String, n: Int = 2): Double {
+    fun grams(value: String): Set<String> =
+        if (value.length <= n) setOf(value) else value.windowed(n).toSet()
+    val left = grams(a)
+    val right = grams(b)
+    if (left.isEmpty() && right.isEmpty()) return 1.0
+    if (left.isEmpty() || right.isEmpty()) return 0.0
+    return left.intersect(right).size.toDouble() / left.union(right).size
+}
+
+private fun lexicalSimilarity(a: String, b: String): Double {
+    val left = normalizeQuizText(a)
+    val right = normalizeQuizText(b)
+    val lt = quizTokens(left)
+    val rt = quizTokens(right)
+    val token = if (lt.isEmpty() && rt.isEmpty()) 1.0
+    else if (lt.isEmpty() || rt.isEmpty()) 0.0
+    else lt.intersect(rt).size.toDouble() / lt.union(rt).size
+    return (token * 0.45 + levenshteinSimilarity(left, right) * 0.35 +
+        ngramSimilarity(left, right) * 0.20).coerceIn(0.0, 1.0)
+}
+
 sealed interface QuizGenerationResult {
-    /** [options] has exactly 4 entries, already shuffled; [correctAnswerText] is one of them. */
     data class QuizQuestion(
         val promptText: String,
         val correctAnswerText: String,
         val options: List<String>
-    ) : QuizGenerationResult
+    ) : QuizGenerationResult {
+        init {
+            require(promptText.isNotBlank())
+            require(correctAnswerText.isNotBlank())
+            require(options.size == 4)
+            require(options.all { it.isNotBlank() })
+            require(options.map(::normalizeQuizText).distinct().size == 4)
+            require(options.count { normalizeQuizText(it) == normalizeQuizText(correctAnswerText) } == 1)
+        }
+    }
 
-    /** Fewer than 3 valid Distractors were found even using the whole bank. */
     data object FlashcardFallback : QuizGenerationResult
 }
 
-/**
- * GenerateQuizQuestion (Algorithms v4.20 §12.4 "الگوریتم نهایی — Quiz
- * Question Generation"). Read-only: builds a 4-option multiple-choice
- * question for an already-selected Concept, or reports that a Flashcard
- * fallback is required. Never mutates Concept, Content, LearningState or
- * DifficultyState, and never decides Difficulty/Stage/Scheduling — those
- * belong to their own independent algorithms.
- *
- * Distractor pool rules (§ مرحله ۲ و قواعد قطعی):
- * - Content must be in [LanguagePair.targetLanguage].
- * - Content must belong to a *different*, currently active Concept —
- *   multiple translations of the SAME Concept can never be Distractors.
- * - Content whose normalized text equals the correct answer's normalized
- *   text is excluded (never a duplicate-looking option).
- * - Candidates are de-duplicated by normalized text (so two different
- *   Concepts sharing the same translation text only occupy one slot).
- *
- * Pool is built in three widening passes without ever discarding a
- * previous pass's candidates (§۲.۱–۲.۳):
- * 1. Exact same Difficulty as [difficultyState.current].
- * 2. + one Difficulty level up and one level down (whichever exist).
- * 3. + the entire bank, no Difficulty filter at all.
- *
- * If fewer than 3 valid Distractors exist even after step 3 →
- * [QuizGenerationResult.FlashcardFallback] (§ قانون ۱۸).
- *
- * [quizDifficulty] (Algorithms O.3 Backlog #1/#2/#3, Phase 38) is a
- * SEPARATE, later re-ranking step over that SAME pool — it never changes
- * which Contents are eligible, only which 3 are preferred once picking
- * the final winners:
- * - [QuizDifficulty.EASY]: Contents from a *different* Category than
- *   [concept] are preferred ("نسبتاً متفاوت‌تر").
- * - [QuizDifficulty.MEDIUM] (the default — preserves this Use Case's
- *   exact pre-existing behavior byte-for-byte): no category preference
- *   at all. The Algorithm's own text for MEDIUM ("Category یا
- *   Subcategory مشابه") depends on a Subcategory/similarity concept that
- *   does not exist anywhere in this domain model (Category is flat, no
- *   hierarchy) — inventing one would be exactly the kind of unspecified
- *   product decision this project avoids making unilaterally, so MEDIUM
- *   is defined here as "no reordering", not a guessed approximation.
- * - [QuizDifficulty.HARD]: Contents from the *same* Category as
- *   [concept] are preferred ("همان ... Category در اولویت است").
- * A Concept with `categoryId == null`, or too few same/different-category
- * candidates to fill 3 slots, silently falls back to the rest of the
- * pool — this preference can never be the reason a question falls back
- * to [QuizGenerationResult.FlashcardFallback]; only "fewer than 3 valid
- * Distractors at all" can.
- */
+private data class QuizBank(
+    val contents: List<Content>,
+    val concepts: List<Concept>,
+    val difficultiesById: Map<UUID, DifficultyState>
+)
+
+private data class DistractorCandidate(
+    val displayText: String,
+    val canonicalKeys: Set<String>,
+    val vocabularyDifficultyDistance: Int,
+    val categoryMatch: Boolean,
+    val entryTypeMatch: Boolean,
+    val lexicalSimilarity: Double
+)
+
 class GenerateQuizQuestionUseCase @Inject constructor(
     private val contentRepository: ContentRepository,
     private val conceptRepository: ConceptRepository,
     private val difficultyStateRepository: DifficultyStateRepository
 ) {
-    suspend operator fun invoke(
-        concept: Concept,
-        activeLanguagePair: LanguagePair,
-        difficultyState: DifficultyState,
-        quizDifficulty: QuizDifficulty = QuizDifficulty.MEDIUM
-    ): QuizGenerationResult {
-        val promptContent =
-            contentRepository.getByConceptIdAndLanguage(concept.id, activeLanguagePair.sourceLanguage)
-                ?: return QuizGenerationResult.FlashcardFallback
-        val correctContent =
-            contentRepository.getByConceptIdAndLanguage(concept.id, activeLanguagePair.targetLanguage)
-                ?: return QuizGenerationResult.FlashcardFallback
+    private var bank: QuizBank? = null
 
-        val correctNormalized = normalize(correctContent.text)
-
-        // Every Content in the target language that does not belong to this Concept.
-        // Multiple translations of THIS Concept are excluded entirely, up front — they
-        // must never become Distractors regardless of Difficulty filtering below.
-        val otherConceptsPool = contentRepository.getAllByLanguageCode(activeLanguagePair.targetLanguage)
-            .filter { it.conceptId != concept.id }
-
-        // conceptId -> Concept, filled in alongside pool-building below so the later
-        // category-preference step never has to re-query for the same Concept twice.
-        val conceptCache = mutableMapOf<UUID, Concept>()
-
-        suspend fun findCandidates(difficultyFilter: VocabularyDifficulty?): List<Content> {
-            if (otherConceptsPool.isEmpty()) return emptyList()
-            val result = mutableListOf<Content>()
-            for (content in otherConceptsPool) {
-                if (normalize(content.text) == correctNormalized) continue
-                // getById only returns active (non soft-deleted) Concepts — an inactive
-                // Concept's translations are silently excluded from the Distractor pool.
-                // Written to avoid `continue` inside getOrPut's lambda (that pattern needs
-                // Kotlin's "non-local break/continue in inline lambdas" feature, which is
-                // still experimental in 1.9.20 and fails the build unless opted into
-                // explicitly — found via a real CI compile failure).
-                val candidateConcept = conceptCache[content.conceptId]
-                    ?: conceptRepository.getById(content.conceptId)?.also { conceptCache[content.conceptId] = it }
-                    ?: continue
-                if (difficultyFilter != null) {
-                    val candidateDifficulty = difficultyStateRepository.get(candidateConcept.id)
-                        ?: continue
-                    if (candidateDifficulty.current != difficultyFilter) continue
-                }
-                result.add(content)
-            }
-            return result
-        }
-
-        fun uniqueByNormalizedText(list: List<Content>): List<Content> =
-            list.distinctBy { normalize(it.text) }
-
-        // Step 2.1 — same Difficulty as the Concept currently being quizzed.
-        var candidates = uniqueByNormalizedText(findCandidates(difficultyState.current))
-
-        // Step 2.2 — widen to one adjacent level up and down (bounded at EASY/VERY_HARD).
-        if (candidates.size < 3) {
-            val levels = VocabularyDifficulty.entries
-            val idx = difficultyState.current.ordinal
-            val adjacentLevels = listOfNotNull(levels.getOrNull(idx - 1), levels.getOrNull(idx + 1))
-            val extra = adjacentLevels.flatMap { findCandidates(it) }
-            candidates = uniqueByNormalizedText(candidates + extra)
-        }
-
-        // Step 2.3 — no Difficulty filter at all, use the whole bank.
-        if (candidates.size < 3) {
-            val extra = findCandidates(null)
-            candidates = uniqueByNormalizedText(candidates + extra)
-        }
-
-        if (candidates.size < 3) return QuizGenerationResult.FlashcardFallback
-
-        val wrongOptions = pickPreferringCategory(candidates, concept, quizDifficulty, conceptCache)
-        val options = (listOf(correctContent.text) + wrongOptions.map { it.text }).shuffled()
-
-        return QuizGenerationResult.QuizQuestion(
-            promptText = promptContent.text,
-            correctAnswerText = correctContent.text,
-            options = options
+    suspend fun refreshBank() {
+        bank = QuizBank(
+            contents = contentRepository.getAll(),
+            concepts = conceptRepository.getAllActive(),
+            difficultiesById = difficultyStateRepository.getAll().associateBy { it.conceptId }
         )
     }
 
-    /** conceptCache is already fully populated for every Content in [pool] by the caller's findCandidates loop. */
-    private fun pickPreferringCategory(
-        pool: List<Content>,
+    suspend operator fun invoke(
         concept: Concept,
-        quizDifficulty: QuizDifficulty,
-        conceptCache: Map<UUID, Concept>
-    ): List<Content> {
-        if (quizDifficulty == QuizDifficulty.MEDIUM || concept.categoryId == null) {
-            return pool.shuffled().take(3)
+        activeLanguagePair: LanguagePair,
+        difficultyState: DifficultyState?,
+        quizDifficulty: QuizDifficulty = QuizDifficulty.MEDIUM,
+        excludedDistractorTexts: Set<String> = emptySet()
+    ): QuizGenerationResult {
+        if (!concept.active) return QuizGenerationResult.FlashcardFallback
+
+        val snapshot = bank ?: run {
+            refreshBank()
+            bank!!
         }
 
-        val sameCategory = pool.filter { conceptCache[it.conceptId]?.categoryId == concept.categoryId }
-        val otherCategory = pool.filter { conceptCache[it.conceptId]?.categoryId != concept.categoryId }
+        val contentsByConcept = snapshot.contents.groupBy { it.conceptId }
+        val conceptContents = contentsByConcept[concept.id].orEmpty()
 
-        val ordered = when (quizDifficulty) {
-            QuizDifficulty.HARD -> sameCategory.shuffled() + otherCategory.shuffled()
-            QuizDifficulty.EASY -> otherCategory.shuffled() + sameCategory.shuffled()
-            QuizDifficulty.MEDIUM -> pool.shuffled() // unreachable, handled above; exhaustive `when` requires it
+        val prompt = conceptContents
+            .filter { it.languageCode.equals(activeLanguagePair.sourceLanguage, true) && it.text.isNotBlank() }
+            .minByOrNull { it.id.toString() }
+            ?: return QuizGenerationResult.FlashcardFallback
+
+        val targetTranslations = conceptContents
+            .filter { it.languageCode.equals(activeLanguagePair.targetLanguage, true) && it.text.isNotBlank() }
+            .sortedBy { it.id.toString() }
+            .distinctBy { normalizeQuizText(it.text) }
+
+        if (targetTranslations.isEmpty()) return QuizGenerationResult.FlashcardFallback
+
+        fun displayTranslations(values: List<Content>): String =
+            values.joinToString(" / ") { it.text.trim() }
+
+        val correctDisplayText = displayTranslations(targetTranslations)
+        val normalizedCorrect = normalizeQuizText(correctDisplayText)
+        val correctCanonicalKeys = targetTranslations
+            .map { normalizeQuizText(it.canonicalKey) }
+            .filter { it.isNotBlank() }
+            .toSet()
+
+        val effectiveVocabularyDifficulty =
+            difficultyState?.current ?: VocabularyDifficulty.MEDIUM
+
+        val targetLanguageIds = contentsByConcept
+            .filterValues { values ->
+                values.any {
+                    it.languageCode.equals(activeLanguagePair.targetLanguage, true) &&
+                        it.text.isNotBlank()
+                }
+            }
+            .keys
+
+        val sourceLanguageIds = contentsByConcept
+            .filterValues { values ->
+                values.any {
+                    it.languageCode.equals(activeLanguagePair.sourceLanguage, true) &&
+                        it.text.isNotBlank()
+                }
+            }
+            .keys
+
+        val eligibleConcepts = snapshot.concepts.asSequence()
+            .filter { it.active && it.id != concept.id }
+            .filter { it.id in targetLanguageIds && it.id in sourceLanguageIds }
+            .toList()
+
+        fun difficultyDistance(other: Concept): Int {
+            val otherDifficulty = snapshot.difficultiesById[other.id]?.current ?: return 3
+            return when (effectiveVocabularyDifficulty) {
+                VocabularyDifficulty.EASY -> when (otherDifficulty) {
+                    VocabularyDifficulty.EASY -> 0
+                    VocabularyDifficulty.MEDIUM -> 1
+                    VocabularyDifficulty.HARD -> 2
+                    VocabularyDifficulty.VERY_HARD -> 3
+                }
+                VocabularyDifficulty.MEDIUM -> when (otherDifficulty) {
+                    VocabularyDifficulty.MEDIUM -> 0
+                    VocabularyDifficulty.EASY, VocabularyDifficulty.HARD -> 1
+                    VocabularyDifficulty.VERY_HARD -> 2
+                }
+                VocabularyDifficulty.HARD -> when (otherDifficulty) {
+                    VocabularyDifficulty.HARD -> 0
+                    VocabularyDifficulty.MEDIUM, VocabularyDifficulty.VERY_HARD -> 1
+                    VocabularyDifficulty.EASY -> 2
+                }
+                VocabularyDifficulty.VERY_HARD -> when (otherDifficulty) {
+                    VocabularyDifficulty.VERY_HARD -> 0
+                    VocabularyDifficulty.HARD -> 1
+                    VocabularyDifficulty.MEDIUM -> 2
+                    VocabularyDifficulty.EASY -> 3
+                }
+            }
         }
-        return ordered.take(3)
+
+        val excluded = excludedDistractorTexts
+            .map(::normalizeQuizText)
+            .filter { it.isNotBlank() }
+            .toSet()
+
+        val candidates = eligibleConcepts.mapNotNull { other ->
+            val values = contentsByConcept[other.id].orEmpty()
+                .filter {
+                    it.languageCode.equals(activeLanguagePair.targetLanguage, true) &&
+                        it.text.isNotBlank()
+                }
+                .sortedBy { it.id.toString() }
+                .distinctBy { normalizeQuizText(it.text) }
+
+            if (values.isEmpty()) {
+                null
+            } else {
+                val displayText = displayTranslations(values)
+                DistractorCandidate(
+                    displayText = displayText,
+                    canonicalKeys = values.map { normalizeQuizText(it.canonicalKey) }
+                        .filter { it.isNotBlank() }
+                        .toSet(),
+                    vocabularyDifficultyDistance = difficultyDistance(other),
+                    categoryMatch = concept.categoryId != null &&
+                        concept.categoryId == other.categoryId,
+                    entryTypeMatch = concept.entryType == other.entryType,
+                    lexicalSimilarity = lexicalSimilarity(correctDisplayText, displayText)
+                )
+            }
+        }
+            .filter { normalizeQuizText(it.displayText) != normalizedCorrect }
+            .filter {
+                correctCanonicalKeys.isEmpty() ||
+                    it.canonicalKeys.none { key -> key in correctCanonicalKeys }
+            }
+            .distinctBy { normalizeQuizText(it.displayText) }
+
+        val freshCandidates = candidates.filter {
+            normalizeQuizText(it.displayText) !in excluded
+        }
+        val selectionCandidates =
+            if (freshCandidates.size >= 3) freshCandidates else candidates
+
+        if (selectionCandidates.size < 3) {
+            return QuizGenerationResult.FlashcardFallback
+        }
+
+        fun confusabilityScore(candidate: DistractorCandidate): Double {
+            val category = if (candidate.categoryMatch) 1.0 else 0.0
+            val entryType = if (candidate.entryTypeMatch) 1.0 else 0.0
+            return (
+                candidate.lexicalSimilarity * 0.55 +
+                    category * 0.25 +
+                    entryType * 0.20
+                ).coerceIn(0.0, 1.0)
+        }
+
+        val sameDifficulty = selectionCandidates.filter { it.vocabularyDifficultyDistance == 0 }
+        val adjacentDifficulty = selectionCandidates.filter { it.vocabularyDifficultyDistance == 1 }
+        val selectedPool = when {
+            sameDifficulty.size >= 3 -> sameDifficulty
+            (sameDifficulty + adjacentDifficulty)
+                .distinctBy { normalizeQuizText(it.displayText) }
+                .size >= 3 ->
+                (sameDifficulty + adjacentDifficulty)
+                    .distinctBy { normalizeQuizText(it.displayText) }
+            else -> selectionCandidates
+        }
+
+        val easyPreferred = selectedPool.filter { !it.categoryMatch && !it.entryTypeMatch }
+        val easyFallback = selectedPool.filter { !it.categoryMatch }
+        val mediumPreferred = selectedPool.filter { it.categoryMatch && !it.entryTypeMatch }
+        val mediumFallback = selectedPool.filter { it.categoryMatch }
+        val hardPreferred = selectedPool.filter { it.categoryMatch && it.entryTypeMatch }
+        val hardFallback = selectedPool.filter { it.categoryMatch }
+
+        fun ranked(
+            values: List<DistractorCandidate>,
+            descending: Boolean
+        ): List<DistractorCandidate> =
+            if (descending) {
+                values.sortedWith(
+                    compareByDescending<DistractorCandidate> { confusabilityScore(it) }
+                        .thenBy { normalizeQuizText(it.displayText) }
+                )
+            } else {
+                values.sortedWith(
+                    compareBy<DistractorCandidate> { confusabilityScore(it) }
+                        .thenBy { normalizeQuizText(it.displayText) }
+                )
+            }
+
+        fun chooseBand(
+            preferred: List<DistractorCandidate>,
+            fallback: List<DistractorCandidate>,
+            mode: QuizDifficulty
+        ): List<DistractorCandidate> {
+            val source = when {
+                preferred.size >= 3 -> preferred
+                fallback.size >= 3 -> fallback
+                else -> selectedPool
+            }
+            val ordered = ranked(source, descending = mode == QuizDifficulty.HARD)
+            if (ordered.size <= 3) return ordered
+
+            return when (mode) {
+                QuizDifficulty.EASY -> ordered.take(3)
+                QuizDifficulty.MEDIUM -> {
+                    val start = ((ordered.size - 3) / 2).coerceAtLeast(0)
+                    ordered.drop(start).take(3)
+                }
+                QuizDifficulty.HARD -> ordered.take(3)
+            }
+        }
+
+        val wrong = when (quizDifficulty) {
+            QuizDifficulty.EASY -> chooseBand(easyPreferred, easyFallback, QuizDifficulty.EASY)
+            QuizDifficulty.MEDIUM -> chooseBand(mediumPreferred, mediumFallback, QuizDifficulty.MEDIUM)
+            QuizDifficulty.HARD -> chooseBand(hardPreferred, hardFallback, QuizDifficulty.HARD)
+        }.map { it.displayText }
+
+        if (wrong.size < 3) return QuizGenerationResult.FlashcardFallback
+
+        val options = (listOf(correctDisplayText) + wrong).shuffled()
+
+        if (
+            options.size != 4 ||
+            options.map(::normalizeQuizText).distinct().size != 4 ||
+            options.count { normalizeQuizText(it) == normalizedCorrect } != 1
+        ) {
+            return QuizGenerationResult.FlashcardFallback
+        }
+
+        return QuizGenerationResult.QuizQuestion(
+            promptText = prompt.text,
+            correctAnswerText = correctDisplayText,
+            options = options
+        )
     }
-
-    /**
-     * Text-equality normalization for Distractor comparison (§ Normalization).
-     * Reuses [computeCanonicalKey] — same "trim + lowercase + collapse
-     * whitespace, keep accents/punctuation" rule already used for
-     * canonicalKey; this is purely a comparison helper, not a persisted field.
-     */
-    private fun normalize(text: String): String = computeCanonicalKey(text)
 }
