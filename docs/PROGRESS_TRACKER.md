@@ -1,6 +1,6 @@
 # FlashLearn — Progress Tracker (بازنویسی کامل v5.0)
 
-**آخرین به‌روزرسانی:** 2026-09-20 (فاز ۳۹ — رفع باگ کامپایل واقعی)
+**آخرین به‌روزرسانی:** 2026-09-20 (فاز ۴۰ — رفع باگ کامپایل واقعی در AddWordScreen)
 **مرجع مشخصات:** Algorithms v4.20 + Descriptions v4.20
 **نوع کار:** بازنویسی کامل از صفر (نه ادامه کد قبلی v4.36)
 **تقسیم‌بندی:** ۳۰ مرحله؛ هر مرحله یک zip کامل و قابل build
@@ -656,6 +656,31 @@ GenerateQuizQuestionUseCase.kt:118:69 The feature "break continue in inline lamb
 علت: کد فاز ۳۸ داخل لامبدای `conceptCache.getOrPut(content.conceptId) { conceptRepository.getById(...) ?: continue }` از یک `continue` غیرمحلی استفاده می‌کرد. این نحو در Kotlin واقعاً معتبر است (چون `getOrPut` روی `MutableMap` یک تابع `inline` است)، اما در Kotlin 1.9.20 هنوز پشت یک پرچم Experimental قرار دارد که این پروژه فعالش نکرده بود — دقیقاً یکی دیگر از آن دسته باگ‌هایی که فقط با اجرای واقعی Gradle/Kotlin Compiler قابل کشف است، نه با هیچ بررسی متنی.
 
 رفع: به‌جای فعال‌کردن پرچم Experimental (که ریسک ناپایداری بین نسخه‌های بعدی Kotlin دارد)، کد بازنویسی شد تا اصلاً نیازی به `continue` داخل لامبدا نداشته باشد — جست‌وجوی Cache و Fetch از `getOrPut` جدا شدند؛ `continue` حالا مستقیماً داخل بدنه حلقه `for` است (همیشه معتبر، بدون نیاز به هیچ پرچمی). منطق و رفتار الگوریتم کاملاً بدون تغییر ماند؛ فقط ساختار کد اصلاح شد. `grep` تأیید کرد این الگو (`getOrPut` همراه `continue` داخل لامبدا) در هیچ فایل دیگری در پروژه تکرار نشده بود.
+
+## فاز ۴۰ (بعد از v1.4.1): چهارمین اجرای واقعی CI — یک علت، شش خطا در `AddWordScreen.kt`
+
+`v1.4.1` روی CI اجرا شد. `:domain`، `:database`، `:data` و `:core` کامل build شدند (یعنی رفع فاز ۳۹ درست بود)؛ `:app:kspDebugKotlin` (Hilt) هم موفق بود. `:app:compileDebugKotlin` با ۶ خطا شکست خورد — همه در همین یک فایل و همه از یک علت:
+
+```
+AddWordScreen.kt:17:35  Unresolved reference: ExposedDropdownMenu
+AddWordScreen.kt:140:5 / 146:30 / 146:58 / 147:48 / 149:9  This material API is experimental ...
+```
+
+**علت:** این کد در فاز ۳۶ (انتخاب Category در AddWord) نوشته شده بود و تا الان هرگز توسط کامپایلر واقعی دیده نشده بود (اجرای‌های CI بین فاز ۳۶ و ۳۸ اصلاً به `:app` نرسیدند). دو اشتباه مستقل:
+1. `import androidx.compose.material3.ExposedDropdownMenu` غلط بود. در Material3 1.2.0 (BOM 2024.02.00) تابع `ExposedDropdownMenu` یک **عضو** `ExposedDropdownMenuBoxScope` است، نه تابع top-level — داخل `ExposedDropdownMenuBox { }` خودکار در دسترس است و نباید import شود. (دقیقاً همان الگوی باگ فاز ۳۳ با `weight`.)
+2. `ExposedDropdownMenuBox`، `ExposedDropdownMenuDefaults`، `TrailingIcon`، `menuAnchor()` و `ExposedDropdownMenu` همگی `@ExperimentalMaterial3Api` هستند و سطح این هشدار در Kotlin «Error» است، نه Warning.
+
+**رفع:** حذف import اشتباه + `@OptIn(ExperimentalMaterial3Api::class)` روی خودِ `CategoryDropdown` (کوچک‌ترین scope ممکن؛ هیچ پرچم سراسری Experimental در Gradle فعال نشد).
+
+**بررسی گسترده‌ی انجام‌شده (تا دور بعدی CI خطای تازه‌ای از همین دسته نبیند):**
+- کامپایلر Kotlin همه‌ی فایل‌های ماژول را با هم تحلیل می‌کند؛ پس اینکه فقط این ۶ خطا گزارش شد یعنی سایر فایل‌های `:app` (SettingsScreen، ReviewScreen، …) در مرحله‌ی تحلیل مشکلی ندارند.
+- گراف Hilt (که بعد از `compileDebugKotlin` در `hiltJavaCompileDebug` اعتبارسنجی می‌شود): تک‌تک پارامترهای constructor همه‌ی ۱۱ `@HiltViewModel` و همه‌ی UseCaseها و RepositoryImplها با `@Binds/@Provides` تطبیق داده شد — هیچ Binding گمشده‌ای نیست.
+- همه‌ی فایل‌های تست/کدی که بعد از آخرین اجرای موفق تست (v1.1.3) تغییر کرده یا اضافه شده بودند (فازهای ۳۵ تا ۳۹: CSV، رمزنگاری Backup، `BackupJsonCodec`، Quiz Difficulty، Settings، LanguagePair، رفع‌های فاز ۳۵) خط‌به‌خط با کد اصلی مقایسه شدند (امضاها، ترتیب پارامترها، انتظارات عددی).
+- Fake Repositoryها با همه‌ی متدهای Interfaceهای فعلی مقایسه شدند (متد جاافتاده = خطای کامپایل تست).
+- نام تست‌های backtick (۲۸۴ مورد) برای کاراکترهای غیرمجاز JVM، نام تکراری در یک کلاس، و اشتباه JUnit4/JUnit5 بر حسب ماژول اسکن شدند.
+- **محدودیت صادقانه:** این محیط Gradle/Kotlin Compiler ندارد؛ همه‌ی موارد بالا بررسی ایستا است، نه اجرای واقعی. تأیید نهایی همچنان CI است.
+
+**شکاف باز (رفع نشد؛ باگ منطقی، نه build):** هیچ کدی هیچ ردیف `Language` را Seed نمی‌کند (فقط `EnsureDefaultLanguagePairUseCase` یک `LanguagePair` می‌سازد). `validateBackup()` (طبق Algorithms §۹) هر `LanguagePair` را که `sourceLanguage/targetLanguage`اش در `languages` همان Backup نباشد نامعتبر می‌داند. نتیجه: Backup از نوع VOCABULARY/FULL که خودِ اپ می‌سازد، در Restore با `Error` رد می‌شود. PROGRESS تحت تأثیر نیست. رفع نیازمند تصمیم صریح (Seed کردن Language برای es/fa، یا تغییر قاعده‌ی Validator) است؛ عمداً بدون تأیید کاربر انجام نشد.
 
 ## نکات فنی مهم برای مراحل بعد
 
